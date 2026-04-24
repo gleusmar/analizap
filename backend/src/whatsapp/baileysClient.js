@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import QRCode from 'qrcode';
@@ -17,6 +17,7 @@ import {
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { processMessageMedia } from '../services/mediaService.js';
+import { createAuthState } from './whatsappAuth.js';
 
 let sock = null;
 let connectionStatus = 'disconnected';
@@ -51,13 +52,10 @@ export async function createWhatsAppSocket(sessionIdParam = 'default') {
   try {
     logger.info(`Criando socket WhatsApp para sessão: ${sessionId}`);
 
-    // Usa useMultiFileAuthState para autenticação
-    const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
-    const authStateResult = await useMultiFileAuthState(authPath);
+    // Usa auth state do Supabase para persistência
+    const state = await createAuthState(sessionId);
 
-    const { state, saveCreds } = authStateResult;
-
-    saveCredsFunction = saveCreds;
+    saveCredsFunction = state.saveCreds;
 
     // Fetch the latest version of WA Web and Baileys
     const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -887,10 +885,12 @@ export async function disconnectSocket() {
 export async function removeSession() {
   try {
     await disconnectSocket();
-    const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
-    if (fs.existsSync(authPath)) {
-      await rm(authPath, { recursive: true, force: true });
-    }
+
+    // Limpa sessão do Supabase
+    const { WhatsAppAuth } = await import('./whatsappAuth.js');
+    const auth = new WhatsAppAuth(sessionId);
+    await auth.clear();
+
     logger.info('Sessão removida com sucesso');
   } catch (error) {
     logger.error('Erro ao remover sessão:', error);
