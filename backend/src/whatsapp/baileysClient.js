@@ -76,7 +76,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default') {
       logger: loggerBaileys,
       browser: ['Ubuntu', 'Chrome', '20.0.04'],
       markOnlineOnConnect: false,
-      syncFullHistory: true,
+      syncFullHistory: false, // Desabilitado temporariamente para evitar erros de criptografia
       generateHighQualityLinkPreview: true,
       getMessage: async (key) => {
         // Implementar busca de mensagem no banco de dados
