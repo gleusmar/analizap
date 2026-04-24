@@ -46,6 +46,7 @@ Thumbs.db
 backend/uploads/
 backend/.env
 backend/logs/
+backend/auth_info/
 
 # Frontend
 frontend/.env

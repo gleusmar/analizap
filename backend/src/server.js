@@ -33,7 +33,10 @@ app.use((req, res, next) => {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL?.split(',') || ['http://localhost:5173'],
+  credentials: true
+}));
 app.use(express.json());
 
 // Middleware de log para debug
