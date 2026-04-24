@@ -1,0 +1,177 @@
+import { logger } from '../utils/logger.js';
+import {
+  createWhatsAppSocket,
+  getSocket,
+  getConnectionStatus,
+  getQRCode,
+  disconnectSocket,
+  removeSession
+} from '../whatsapp/baileysClient.js';
+import QRCode from 'qrcode';
+
+/**
+ * Conecta ao WhatsApp
+ */
+export async function connect(req, res) {
+  try {
+    logger.info('Solicitação de conexão WhatsApp recebida');
+
+    const socket = getSocket();
+
+    if (socket) {
+      const status = getConnectionStatus();
+      if (status === 'connected') {
+        return res.status(400).json({ error: 'Já conectado ao WhatsApp' });
+      }
+      if (status === 'connecting') {
+        return res.status(400).json({ error: 'Conexão em andamento' });
+      }
+    }
+
+    // Cria o socket
+    await createWhatsAppSocket();
+
+    res.json({
+      success: true,
+      message: 'Conexão iniciada',
+      status: getConnectionStatus()
+    });
+  } catch (error) {
+    logger.error('Erro ao conectar ao WhatsApp:', error);
+    res.status(500).json({ error: 'Erro ao conectar ao WhatsApp' });
+  }
+}
+
+/**
+ * Desconecta do WhatsApp
+ */
+export async function disconnect(req, res) {
+  try {
+    logger.info('Solicitação de desconexão WhatsApp recebida');
+
+    const socket = getSocket();
+
+    if (!socket) {
+      return res.status(400).json({ error: 'Não conectado ao WhatsApp' });
+    }
+
+    await disconnectSocket();
+
+    res.json({
+      success: true,
+      message: 'Desconectado com sucesso',
+      status: getConnectionStatus()
+    });
+  } catch (error) {
+    logger.error('Erro ao desconectar do WhatsApp:', error);
+    res.status(500).json({ error: 'Erro ao desconectar do WhatsApp' });
+  }
+}
+
+/**
+ * Obtém o status da conexão
+ */
+export async function getStatus(req, res) {
+  try {
+    const status = getConnectionStatus();
+    const socket = getSocket();
+
+    let phoneNumber = null;
+    if (socket && socket.user) {
+      phoneNumber = socket.user.id.split(':')[0];
+    }
+
+    res.json({
+      status,
+      phoneNumber,
+      connected: status === 'connected'
+    });
+  } catch (error) {
+    logger.error('Erro ao obter status:', error);
+    res.status(500).json({ error: 'Erro ao obter status' });
+  }
+}
+
+/**
+ * Obtém o QR Code
+ */
+export async function getQR(req, res) {
+  try {
+    const qr = getQRCode();
+
+    if (!qr) {
+      const status = getConnectionStatus();
+      if (status === 'connected') {
+        return res.status(400).json({ error: 'Já conectado ao WhatsApp' });
+      }
+      return res.status(404).json({ error: 'QR Code não disponível' });
+    }
+
+    // Converte QR Code para imagem
+    const qrImage = await QRCode.toDataURL(qr);
+
+    res.json({
+      success: true,
+      qr: qrImage,
+      status: getConnectionStatus()
+    });
+  } catch (error) {
+    logger.error('Erro ao obter QR Code:', error);
+    res.status(500).json({ error: 'Erro ao obter QR Code' });
+  }
+}
+
+/**
+ * Atualiza o QR Code
+ */
+export async function refreshQR(req, res) {
+  try {
+    logger.info('Solicitação de atualização de QR Code recebida');
+
+    const socket = getSocket();
+
+    if (!socket) {
+      return res.status(400).json({ error: 'Socket não criado. Conecte primeiro.' });
+    }
+
+    const status = getConnectionStatus();
+
+    if (status === 'connected') {
+      return res.status(400).json({ error: 'Já conectado ao WhatsApp' });
+    }
+
+    // Remove a sessão para gerar novo QR
+    await removeSession();
+
+    // Cria novo socket
+    await createWhatsAppSocket();
+
+    res.json({
+      success: true,
+      message: 'QR Code atualizado',
+      status: getConnectionStatus()
+    });
+  } catch (error) {
+    logger.error('Erro ao atualizar QR Code:', error);
+    res.status(500).json({ error: 'Erro ao atualizar QR Code' });
+  }
+}
+
+/**
+ * Remove a sessão
+ */
+export async function removeSessionController(req, res) {
+  try {
+    logger.info('Solicitação de remoção de sessão recebida');
+
+    await removeSession();
+
+    res.json({
+      success: true,
+      message: 'Sessão removida com sucesso'
+    });
+  } catch (error) {
+    logger.error('Erro ao remover sessão:', error);
+    res.status(500).json({ error: 'Erro ao remover sessão' });
+  }
+}
