@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import QRCode from 'qrcode';
@@ -24,6 +24,11 @@ let qrCode = null;
 let sessionId = 'default';
 let io = null;
 let saveCredsFunction = null;
+
+// Sistema de exponential backoff para reconexão
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_DELAY = 3000; // 3 segundos
 
 // Sistema de batching para mensagens do histórico
 const messageBatch = [];
@@ -105,10 +110,10 @@ function setupEvents(socket) {
 
   // Evento de atualização da conexão
   socket.ev.on('connection.update', async (update) => {
-    logger.info('🔌 Evento connection.update:', { 
-      connection: update.connection, 
+    logger.info('🔌 Evento connection.update:', {
+      connection: update.connection,
       hasQR: !!update.qr,
-      isNewLogin: update.isNewLogin 
+      isNewLogin: update.isNewLogin
     });
     const { connection, lastDisconnect, isNewLogin, qr } = update;
 
@@ -123,28 +128,88 @@ function setupEvents(socket) {
     }
 
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== 401;
-      logger.info('Conexão fechada:', lastDisconnect?.error || 'Sem erro');
+      const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+
+      // Log detalhado do motivo da desconexão
+      logger.info('Conexão fechada:', {
+        statusCode,
+        error: lastDisconnect?.error?.message,
+        isBoom: lastDisconnect?.error instanceof Boom
+      });
+
+      // Determinar se deve reconectar baseado no DisconnectReason
+      let shouldReconnect = true;
+      let reason = '';
+
+      switch (statusCode) {
+        case DisconnectReason.loggedOut:
+          shouldReconnect = false;
+          reason = 'Usuário fez logout';
+          break;
+        case DisconnectReason.badSession:
+          shouldReconnect = false;
+          reason = 'Sessão inválida - precisa reautenticar';
+          break;
+        case DisconnectReason.multideviceMismatch:
+          shouldReconnect = false;
+          reason = 'Mismatch de multi-dispositivo - atualize a biblioteca';
+          break;
+        case DisconnectReason.forbidden:
+          shouldReconnect = false;
+          reason = 'Acesso negado - verifique credenciais';
+          break;
+        case DisconnectReason.restartRequired:
+          shouldReconnect = true;
+          reason = 'Servidor solicitou restart';
+          break;
+        case DisconnectReason.connectionClosed:
+        case DisconnectReason.connectionLost:
+        case DisconnectReason.timedOut:
+          shouldReconnect = true;
+          reason = 'Problema de conexão de rede';
+          break;
+        default:
+          shouldReconnect = true;
+          reason = 'Erro desconhecido';
+      }
+
+      logger.info(`Motivo da desconexão: ${reason}, Reconectar: ${shouldReconnect}`);
 
       if (shouldReconnect) {
-        logger.info('Tentando reconectar...');
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+          logger.error(`Máximo de tentativas de reconexão atingido (${MAX_RECONNECT_ATTEMPTS})`);
+          connectionStatus = 'disconnected';
+          emitConnectionStatus('disconnected');
+          return;
+        }
+
+        // Exponential backoff
+        const delay = BASE_DELAY * Math.pow(2, reconnectAttempts);
+        reconnectAttempts++;
+
+        logger.info(`Tentando reconectar em ${delay}ms (tentativa ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
         connectionStatus = 'connecting';
         emitConnectionStatus('connecting');
+
         setTimeout(() => {
           createWhatsAppSocket(sessionId);
-        }, 5000);
+        }, delay);
       } else {
-        logger.info('Conexão encerrada (logout)');
+        logger.info('Conexão encerrada permanentemente');
         connectionStatus = 'disconnected';
         qrCode = null;
         emitConnectionStatus('disconnected');
-        // Limpar credenciais removendo a pasta
-        removeSession();
+        reconnectAttempts = 0;
+        // Limpar credenciais se for badSession ou loggedOut
+        if (statusCode === DisconnectReason.badSession || statusCode === DisconnectReason.loggedOut) {
+          removeSession();
+        }
       }
     } else if (connection === 'open') {
       logger.info('Conexão aberta com sucesso');
       connectionStatus = 'connected';
       qrCode = null;
+      reconnectAttempts = 0; // Reset contador de tentativas
       emitConnectionStatus('connected');
 
       // Forçar processamento do batch final após conexão
