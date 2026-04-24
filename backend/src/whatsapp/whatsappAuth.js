@@ -186,8 +186,16 @@ export class WhatsAppAuth {
 export async function createAuthState(sessionId = 'default') {
   const auth = new WhatsAppAuth(sessionId);
 
+  const loadedCreds = await auth.loadCreds();
+
+  // Se não houver credenciais, inicializa com objeto vazio válido
+  const initialCreds = loadedCreds || {
+    me: null,
+    registration: null
+  };
+
   const state = {
-    creds: await auth.loadCreds(),
+    creds: initialCreds,
     keys: {
       get: async (type, ids) => {
         const results = {};
