@@ -134,43 +134,40 @@ function setupEvents(socket) {
       logger.info('Conexão fechada:', {
         statusCode,
         error: lastDisconnect?.error?.message,
-        isBoom: lastDisconnect?.error instanceof Boom
+        isBoom: lastDisconnect?.error instanceof Boom,
+        DisconnectReason_loggedOut: DisconnectReason.loggedOut,
+        DisconnectReason_badSession: DisconnectReason.badSession,
+        DisconnectReason_forbidden: DisconnectReason.forbidden
       });
 
       // Determinar se deve reconectar baseado no DisconnectReason
       let shouldReconnect = true;
       let reason = '';
 
-      switch (statusCode) {
-        case DisconnectReason.loggedOut:
-          shouldReconnect = false;
-          reason = 'Usuário fez logout';
-          break;
-        case DisconnectReason.badSession:
-          shouldReconnect = false;
-          reason = 'Sessão inválida - precisa reautenticar';
-          break;
-        case DisconnectReason.multideviceMismatch:
-          shouldReconnect = false;
-          reason = 'Mismatch de multi-dispositivo - atualize a biblioteca';
-          break;
-        case DisconnectReason.forbidden:
-          shouldReconnect = false;
-          reason = 'Acesso negado - verifique credenciais';
-          break;
-        case DisconnectReason.restartRequired:
-          shouldReconnect = true;
-          reason = 'Servidor solicitou restart';
-          break;
-        case DisconnectReason.connectionClosed:
-        case DisconnectReason.connectionLost:
-        case DisconnectReason.timedOut:
-          shouldReconnect = true;
-          reason = 'Problema de conexão de rede';
-          break;
-        default:
-          shouldReconnect = true;
-          reason = 'Erro desconhecido';
+      // Verificação direta para 401 (loggedOut)
+      if (statusCode === 401) {
+        shouldReconnect = false;
+        reason = 'Usuário fez logout (401)';
+      } else if (statusCode === DisconnectReason.badSession) {
+        shouldReconnect = false;
+        reason = 'Sessão inválida - precisa reautenticar';
+      } else if (statusCode === DisconnectReason.multideviceMismatch) {
+        shouldReconnect = false;
+        reason = 'Mismatch de multi-dispositivo - atualize a biblioteca';
+      } else if (statusCode === DisconnectReason.forbidden) {
+        shouldReconnect = false;
+        reason = 'Acesso negado - verifique credenciais';
+      } else if (statusCode === DisconnectReason.restartRequired) {
+        shouldReconnect = true;
+        reason = 'Servidor solicitou restart';
+      } else if (statusCode === DisconnectReason.connectionClosed ||
+                 statusCode === DisconnectReason.connectionLost ||
+                 statusCode === DisconnectReason.timedOut) {
+        shouldReconnect = true;
+        reason = 'Problema de conexão de rede';
+      } else {
+        shouldReconnect = true;
+        reason = `Erro desconhecido (statusCode: ${statusCode})`;
       }
 
       logger.info(`Motivo da desconexão: ${reason}, Reconectar: ${shouldReconnect}`);
