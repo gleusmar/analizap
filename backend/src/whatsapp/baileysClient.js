@@ -718,7 +718,8 @@ async function handleIncomingMessage(message) {
       pushName || null,
       null,
       null,
-      sock
+      sock,
+      messageTimestamp // passa timestamp para verificar período de sincronização
     );
 
     // Emitir mensagem temporária apenas para mensagens de texto (não para mídia)

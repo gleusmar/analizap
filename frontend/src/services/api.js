@@ -44,6 +44,14 @@ api.interceptors.response.use(
       // Token expirado ou inválido
       localStorage.removeItem('auth-storage');
       window.location.href = '/login';
+    } else if (error.response?.status === 403) {
+      // Sessão expirada ou inválida
+      const errorMessage = error.response?.data?.error || '';
+      if (errorMessage.includes('Sessão') || errorMessage.includes('expirada') || errorMessage.includes('inválida')) {
+        console.warn('Sessão expirada, redirecionando para login');
+        localStorage.removeItem('auth-storage');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

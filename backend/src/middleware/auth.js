@@ -22,7 +22,13 @@ export const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
+    logger.debug('Token verificado com sucesso', {
+      userId: decoded.id,
+      email: decoded.email,
+      path: req.path
+    });
+
     // Verificar se o usuário existe no banco
     const { data: user, error: userError } = await supabase
       .from('users')
@@ -33,7 +39,8 @@ export const authenticateToken = async (req, res, next) => {
     if (userError || !user) {
       logger.warn('Usuário não encontrado no banco', {
         userId: decoded.id,
-        email: decoded.email
+        email: decoded.email,
+        userError: userError?.message
       });
       // Limpar sessões inválidas
       await supabase
@@ -42,7 +49,12 @@ export const authenticateToken = async (req, res, next) => {
         .eq('token', token);
       return res.status(403).json({ error: 'Usuário não encontrado. Por favor, faça login novamente.' });
     }
-    
+
+    logger.debug('Usuário encontrado', {
+      userId: user.id,
+      email: user.email
+    });
+
     // Verificar se a sessão ainda está ativa no banco
     const { data: session, error } = await supabase
       .from('user_sessions')
@@ -54,31 +66,72 @@ export const authenticateToken = async (req, res, next) => {
     if (error || !session) {
       logger.warn('Sessão inválida ou expirada', {
         userId: decoded.id,
-        email: user.email
+        email: user.email,
+        error: error?.message,
+        sessionExists: !!session
       }, decoded.id, 'AUTH_SESSION_INVALID', req);
+
+      // Buscar todas as sessões do usuário para debug
+      const { data: allSessions } = await supabase
+        .from('user_sessions')
+        .select('*')
+        .eq('user_id', decoded.id);
+
+      logger.debug('Todas as sessões do usuário', {
+        userId: decoded.id,
+        sessionCount: allSessions?.length || 0,
+        sessions: allSessions?.map(s => ({
+          id: s.id,
+          is_active: s.is_active,
+          expires_at: s.expires_at
+        }))
+      });
+
       return res.status(403).json({ error: 'Sessão inválida ou expirada' });
     }
 
+    logger.debug('Sessão encontrada', {
+      sessionId: session.id,
+      is_active: session.is_active,
+      expires_at: session.expires_at
+    });
+
     // Verificar se o token expirou
-    if (new Date(session.expires_at) < new Date()) {
+    const now = new Date();
+    const expiresAt = new Date(session.expires_at);
+
+    if (expiresAt < now) {
+      logger.warn('Sessão expirada', {
+        userId: decoded.id,
+        email: user.email,
+        expiresAt: expiresAt.toISOString(),
+        now: now.toISOString()
+      }, decoded.id, 'AUTH_SESSION_EXPIRED', req);
+
       // Desativar sessão
       await supabase
         .from('user_sessions')
         .update({ is_active: false })
         .eq('id', session.id);
 
-      logger.warn('Sessão expirada', {
-        userId: decoded.id,
-        email: decoded.email
-      }, decoded.id, 'AUTH_SESSION_EXPIRED', req);
       return res.status(403).json({ error: 'Sessão expirada' });
     }
+
+    logger.debug('Sessão válida', {
+      userId: decoded.id,
+      sessionId: session.id
+    });
 
     req.user = decoded;
     req.sessionId = session.id;
 
     next();
   } catch (err) {
+    logger.error('Erro ao verificar token', {
+      error: err.message,
+      stack: err.stack,
+      path: req.path
+    });
     logger.logUnauthorizedAccess(null, req.path, req);
     return res.status(403).json({ error: 'Token inválido ou expirado' });
   }
