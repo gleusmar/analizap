@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { rm } from 'fs/promises';
+import { supabase } from '../config/supabase.js';
 import {
   processWhatsAppMessage,
   getOrCreateConversation,
@@ -25,6 +26,190 @@ let sessionId = 'default';
 let io = null;
 let saveCredsFunction = null;
 let syncPeriodDays = 7; // Período de sincronização em dias (padrão: 7)
+
+// Funções para persistência de sessão no banco de dados
+async function saveAuthToDB(creds) {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_auth')
+      .upsert({
+        session_id: sessionId,
+        creds: creds,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'session_id'
+      });
+
+    if (error) {
+      logger.error('Erro ao salvar auth no banco:', error);
+      throw error;
+    }
+
+    logger.info('Auth salvo no banco com sucesso');
+  } catch (error) {
+    logger.error('Erro ao salvar auth no banco:', error);
+    throw error;
+  }
+}
+
+async function loadAuthFromDB() {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_auth')
+      .select('creds')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        logger.info('Nenhuma sessão salva no banco');
+        return null;
+      }
+      logger.error('Erro ao carregar auth do banco:', error);
+      throw error;
+    }
+
+    if (data) {
+      logger.info('Auth carregado do banco com sucesso');
+      return data.creds;
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Erro ao carregar auth do banco:', error);
+    throw error;
+  }
+}
+
+async function saveKeyToDB(type, id, value) {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_keys')
+      .upsert({
+        session_id: sessionId,
+        type: type,
+        id: id,
+        value: value,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'session_id,type,id'
+      });
+
+    if (error) {
+      logger.error('Erro ao salvar key no banco:', error);
+      throw error;
+    }
+  } catch (error) {
+    logger.error('Erro ao salvar key no banco:', error);
+    throw error;
+  }
+}
+
+async function loadKeyFromDB(type, id) {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_keys')
+      .select('value')
+      .eq('session_id', sessionId)
+      .eq('type', type)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      logger.error('Erro ao carregar key do banco:', error);
+      throw error;
+    }
+
+    if (data) {
+      return data.value;
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Erro ao carregar key do banco:', error);
+    throw error;
+  }
+}
+
+async function deleteAllKeysFromDB() {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_keys')
+      .delete()
+      .eq('session_id', sessionId);
+
+    if (error) {
+      logger.error('Erro ao deletar keys do banco:', error);
+      throw error;
+    }
+
+    logger.info('Keys deletadas do banco com sucesso');
+  } catch (error) {
+    logger.error('Erro ao deletar keys do banco:', error);
+    throw error;
+  }
+}
+
+async function getAllKeysFromDB() {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_keys')
+      .select('type, id, value')
+      .eq('session_id', sessionId);
+
+    if (error) {
+      logger.error('Erro ao carregar keys do banco:', error);
+      throw error;
+    }
+
+    const keys = {};
+    if (data) {
+      for (const key of data) {
+        if (!keys[key.type]) {
+          keys[key.type] = {};
+        }
+        keys[key.type][key.id] = key.value;
+      }
+    }
+
+    return keys;
+  } catch (error) {
+    logger.error('Erro ao carregar keys do banco:', error);
+    throw error;
+  }
+}
+
+// Custom auth state usando banco de dados
+function useDBAuthState() {
+  return {
+    state: {
+      creds: loadAuthFromDB(),
+      keys: {
+        get: async (type, ids) => {
+          const keys = {};
+          for (const id of ids) {
+            const value = await loadKeyFromDB(type, id);
+            if (value) {
+              keys[id] = value;
+            }
+          }
+          return keys;
+        },
+        set: async (data) => {
+          for (const type in data) {
+            for (const id in data[type]) {
+              await saveKeyToDB(type, id, data[type][id]);
+            }
+          }
+        }
+      }
+    },
+    saveCreds: saveAuthToDB
+  };
+}
 
 // Sistema de exponential backoff para reconexão
 let reconnectAttempts = 0;
@@ -65,12 +250,8 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
   try {
     logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
 
-    // Usa useMultiFileAuthState para autenticação (padrão do Baileys)
-    // No Railway, o volume está montado em /app/backend/auth_info
-    const authPath = process.env.RAILWAY
-      ? path.join('/app', 'backend', 'auth_info', sessionId)
-      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
-    const authStateResult = await useMultiFileAuthState(authPath);
+    // Usa useDBAuthState para persistência no banco de dados
+    const authStateResult = useDBAuthState();
 
     const { state, saveCreds } = authStateResult;
 
@@ -989,13 +1170,21 @@ export async function disconnectSocket() {
 export async function removeSession() {
   try {
     await disconnectSocket();
-    const authPath = process.env.RAILWAY
-      ? path.join('/app', 'backend', 'auth_info', sessionId)
-      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
-    if (fs.existsSync(authPath)) {
-      await rm(authPath, { recursive: true, force: true });
+
+    // Deletar do banco de dados
+    const { error: authError } = await supabase
+      .from('whatsapp_auth')
+      .delete()
+      .eq('session_id', sessionId);
+
+    if (authError) {
+      logger.error('Erro ao deletar auth do banco:', authError);
+      throw authError;
     }
-    logger.info('Sessão removida com sucesso');
+
+    await deleteAllKeysFromDB();
+
+    logger.info('Sessão removida do banco com sucesso');
   } catch (error) {
     logger.error('Erro ao remover sessão:', error);
     throw error;
@@ -1005,18 +1194,35 @@ export async function removeSession() {
 /**
  * Verifica se existe uma sessão salva
  */
-export function hasSessionSaved() {
-  const authPath = process.env.RAILWAY
-    ? path.join('/app', 'backend', 'auth_info', sessionId)
-    : path.join(__dirname, '..', '..', 'auth_info', sessionId);
-  return fs.existsSync(authPath);
+export async function hasSessionSaved() {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_auth')
+      .select('id')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return false;
+      }
+      logger.error('Erro ao verificar sessão no banco:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch (error) {
+    logger.error('Erro ao verificar sessão no banco:', error);
+    return false;
+  }
 }
 
 /**
  * Tenta reconectar usando a sessão salva (se existir)
  */
 export async function reconnectWithSavedSession(sessionIdParam = 'default', syncPeriodDaysParam = 7) {
-  if (!hasSessionSaved()) {
+  const hasSaved = await hasSessionSaved();
+  if (!hasSaved) {
     logger.info('Nenhuma sessão salva encontrada');
     return false;
   }

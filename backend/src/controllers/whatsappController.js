@@ -36,7 +36,7 @@ export async function connect(req, res) {
     logger.info(`Período de sincronização configurado: ${syncPeriodDays} dias`);
 
     // Verifica se existe sessão salva para reconectar automaticamente
-    const hasSavedSession = hasSessionSaved();
+    const hasSavedSession = await hasSessionSaved();
     logger.info(`Sessão salva encontrada: ${hasSavedSession}`);
 
     if (hasSavedSession) {
@@ -204,7 +204,7 @@ export async function removeSessionController(req, res) {
  */
 export async function checkSession(req, res) {
   try {
-    const hasSaved = hasSessionSaved();
+    const hasSaved = await hasSessionSaved();
 
     res.json({
       success: true,

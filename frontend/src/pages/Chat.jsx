@@ -1092,28 +1092,28 @@ function Chat() {
           <div className="flex space-x-2 mb-3">
             <input
               type="text"
-              placeholder="Buscar conversa..."
+              placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-32 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <button
               onClick={toggleMultiSelectMode}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isMultiSelectMode ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
               }`}
               title={isMultiSelectMode ? 'Sair do modo de seleção' : 'Seleção múltipla'}
             >
-              {isMultiSelectMode ? <CheckSquare size={20} /> : <Square size={20} />}
+              {isMultiSelectMode ? <CheckSquare size={18} /> : <Square size={18} />}
             </button>
             <button
               onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
                 sortOrder === 'desc' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
               }`}
               title={`Ordenar: ${sortOrder === 'desc' ? 'Mais recente primeiro' : 'Mais antiga primeiro'}`}
             >
-              <ArrowUpDown size={20} />
+              <ArrowUpDown size={18} />
             </button>
           </div>
           <div className="flex space-x-2 mb-3">
