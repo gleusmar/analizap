@@ -140,19 +140,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
   let phone = extractPhoneFromJid(jid);
 
   try {
-    // Verificar período de sincronização para criação de novas conversas
-    if (messageTimestamp && syncPeriodDays) {
-      const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
-
-      if (messageDate < cutoffDate) {
-        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), não cria/atualiza conversa (período: ${syncPeriodDays} dias)`);
-        // Retorna null para indicar que não deve criar/atualizar a conversa
-        return null;
-      }
-    }
-
     // Se o jid for um LID, tenta obter o JID mapeado
     if (jid && jid.endsWith('@lid')) {
       const mappedJid = await getJidFromLid(jid);
@@ -171,6 +158,9 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .single();
 
     if (existingConversation) {
+      // Se a conversa já existe, retorna imediatamente (não verifica período)
+      // Isso permite que mensagens antigas sejam adicionadas a conversas existentes
+
       // Se a conversa estava fechada, reabre
       if (!existingConversation.is_open) {
         const { error: updateError } = await supabase
@@ -180,7 +170,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
         if (updateError) {
           logger.error('Erro ao reabrir conversa:', updateError);
-        } else {
         }
       }
 
@@ -209,6 +198,19 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       }
 
       return existingConversation;
+    }
+
+    // Verificar período de sincronização APENAS para criação de NOVAS conversas
+    if (messageTimestamp && syncPeriodDays) {
+      const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
+
+      if (messageDate < cutoffDate) {
+        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), não cria nova conversa (período: ${syncPeriodDays} dias)`);
+        // Retorna null para indicar que não deve criar nova conversa
+        return null;
+      }
     }
 
     // Se não tiver foto de perfil, tenta buscar

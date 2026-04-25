@@ -1126,7 +1126,7 @@ function Chat() {
             filteredConversations.map(conversation => {
               // Determinar cor da borda baseado na última mensagem
               const lastMessageFromMe = conversation.last_message?.from_me;
-              const borderColor = lastMessageFromMe ? 'bg-gray-400' : 'bg-orange-400';
+              const borderColor = lastMessageFromMe ? 'border-gray-400' : 'border-orange-400';
 
               return (
               <div
