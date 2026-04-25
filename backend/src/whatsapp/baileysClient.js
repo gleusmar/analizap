@@ -30,6 +30,12 @@ let syncPeriodDays = 7; // Período de sincronização em dias (padrão: 7)
 // Funções para persistência de sessão no banco de dados
 async function saveAuthToDB(creds) {
   try {
+    // Não salvar se creds for null ou undefined
+    if (!creds) {
+      logger.warn('Creds é null/undefined, não salvando no banco');
+      return;
+    }
+
     const { error } = await supabase
       .from('whatsapp_auth')
       .upsert({
