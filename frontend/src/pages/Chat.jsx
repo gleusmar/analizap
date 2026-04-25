@@ -230,6 +230,9 @@ function Chat() {
   useEffect(() => {
     if (conversations.length > 0) {
       fetchAllConversationTags();
+    } else {
+      // Inicializar conversationsWithTags com array vazio quando conversations está vazio
+      setConversationsWithTags([]);
     }
   }, [conversations]);
 
@@ -497,7 +500,8 @@ function Chat() {
 
   // Filtrar conversas por aba e busca
   const filteredConversations = useMemo(() => {
-    const conversationsToFilter = conversationsWithTags.length > 0 ? conversationsWithTags : conversations;
+    // Sempre usar conversationsWithTags (já é inicializado com conversations ou array vazio)
+    const conversationsToFilter = conversationsWithTags;
     return conversationsToFilter
       .filter(conv => {
         // Filtrar por aba
@@ -530,7 +534,7 @@ function Chat() {
           ? bDate - aDate // Mais recente primeiro
           : aDate - bDate; // Mais antiga primeiro
       });
-  }, [conversations, conversationsWithTags, activeTab, searchQuery, sortOrder]);
+  }, [conversationsWithTags, activeTab, searchQuery, sortOrder]);
 
   // Combinar mensagens otimistas, socketMessages e mensagens do backend
   const allMessages = useMemo(() => {
