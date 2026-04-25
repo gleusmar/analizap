@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function MessageBubble({ message, isMe, onReact, onForward, onReply, onScrollToMessage }) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [modalImage, setModalImage] = useState(null);
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const { colors } = useTheme();
   const { message_type, content, metadata, timestamp, is_delivered, is_read, delivery_error } = message;
 
   const formatTime = (dateString) => {
@@ -105,15 +107,18 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
         return (
           <div
             onClick={() => onScrollToMessage && onScrollToMessage(quoted.message_id)}
-            className={`mb-2 p-2 rounded-l-lg border-l-2 cursor-pointer hover:opacity-80 transition-opacity ${
-              isMe ? 'bg-emerald-500/30 border-emerald-400' : 'bg-gray-600/30 border-gray-400'
-            }`}
+            className={`mb-2 p-2 rounded-l-lg border-l-2 cursor-pointer hover:opacity-80 transition-opacity`}
+            style={{
+              backgroundColor: isMe ? 'rgba(0, 92, 75, 0.3)' : 'rgba(0, 0, 0, 0.1)',
+              borderColor: isMe ? '#005c4b' : colors.border
+            }}
           >
-            <p className={`text-xs font-medium mb-1 ${isMe ? 'text-emerald-200' : 'text-gray-300'}`}>
+            <p className="text-xs font-medium mb-1" style={{ color: isMe ? 'rgba(255,255,255,0.8)' : colors.textSecondary }}>
               {quoted.from_me ? 'Você' : quoted.contact_name || 'Contato'}
             </p>
-            <p 
-              className={`text-sm truncate ${isMe ? 'text-emerald-100' : 'text-gray-200'}`}
+            <p
+              className="text-sm truncate"
+              style={{ color: isMe ? 'rgba(255,255,255,0.9)' : colors.text }}
               dangerouslySetInnerHTML={{
                 __html: quoted.message_type === 'text' ? formatWhatsAppText(quoted.content) : `[${quoted.message_type}]`
               }}
@@ -130,7 +135,8 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
           <>
             {renderQuoted()}
             <p 
-              className="text-white whitespace-pre-wrap break-words" 
+              className="whitespace-pre-wrap break-words" 
+              style={{ color: isMe ? '#ffffff' : colors.text }}
               dangerouslySetInnerHTML={{ __html: formatWhatsAppText(content) }}
             />
           </>
@@ -138,7 +144,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
       case 'image':
         return (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {renderQuoted()}
             <img
               src={content}
@@ -149,7 +155,8 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
             />
             {metadata?.caption && (
               <p 
-                className="text-white text-sm" 
+                className="text-sm" 
+                style={{ color: isMe ? '#ffffff' : colors.text }}
                 dangerouslySetInnerHTML={{ __html: formatWhatsAppText(metadata.caption) }}
               />
             )}
@@ -160,7 +167,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
         return (
           <div className="flex items-center space-x-2">
             {renderQuoted()}
-            <Music className="text-white w-8 h-8" />
+            <Music className="w-8 h-8" style={{ color: isMe ? '#ffffff' : colors.text }} />
             <audio
               src={content}
               controls
@@ -168,7 +175,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
               controlsList="nodownload"
             />
             {metadata?.seconds && (
-              <span className="text-white text-xs">
+              <span className="text-xs" style={{ color: isMe ? '#ffffff' : colors.text }}>
                 {Math.floor(metadata.seconds / 60)}:{(metadata.seconds % 60).toString().padStart(2, '0')}
               </span>
             )}
@@ -177,7 +184,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
       case 'video':
         return (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {renderQuoted()}
             <video
               src={content}
@@ -190,12 +197,13 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
             <div className="flex items-center justify-between">
               {metadata?.caption && (
                 <p 
-                  className="text-white text-sm" 
+                  className="text-sm" 
+                  style={{ color: isMe ? '#ffffff' : colors.text }}
                   dangerouslySetInnerHTML={{ __html: formatWhatsAppText(metadata.caption) }}
                 />
               )}
               {metadata?.seconds && (
-                <span className="text-white text-xs">
+                <span className="text-xs" style={{ color: isMe ? '#ffffff' : colors.text }}>
                   {Math.floor(metadata.seconds / 60)}:{(metadata.seconds % 60).toString().padStart(2, '0')}
                 </span>
               )}
@@ -206,12 +214,13 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
       case 'document':
         return (
           <div className="flex items-center space-x-2">
-            <FileText className="text-white w-8 h-8" />
+            <FileText className="w-8 h-8" style={{ color: isMe ? '#ffffff' : colors.text }} />
             <a
               href={content}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline"
+              className="hover:underline"
+              style={{ color: '#3498db' }}
             >
               {metadata?.filename || 'Documento'}
             </a>
@@ -222,36 +231,38 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
         try {
           const locationData = JSON.parse(content);
           return (
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center space-x-2">
-                <MapPin className="text-white w-5 h-5" />
-                <span className="text-white font-medium">{locationData.name}</span>
+                <MapPin className="w-5 h-5" style={{ color: isMe ? '#ffffff' : colors.text }} />
+                <span className="font-medium" style={{ color: isMe ? '#ffffff' : colors.text }}>{locationData.name}</span>
               </div>
               <a
                 href={`https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 text-sm"
+                className="text-sm hover:underline"
+                style={{ color: '#3498db' }}
               >
                 Ver no mapa
               </a>
             </div>
           );
         } catch {
-          return <p className="text-white">Localização não disponível</p>;
+          return <p style={{ color: isMe ? '#ffffff' : colors.text }}>Localização não disponível</p>;
         }
 
       case 'contact':
         return (
           <div className="flex items-center space-x-2">
-            <User className="text-white w-8 h-8" />
+            <User className="w-8 h-8" style={{ color: isMe ? '#ffffff' : colors.text }} />
             <div>
-              <p className="text-white font-medium">{content}</p>
+              <p className="font-medium" style={{ color: isMe ? '#ffffff' : colors.text }}>{content}</p>
               {metadata?.vcard && (
                 <a
                   href={`data:text/vcard;base64,${metadata.vcard}`}
                   download="contact.vcf"
-                  className="text-blue-400 hover:text-blue-300 text-sm"
+                  className="text-sm hover:underline"
+                  style={{ color: '#3498db' }}
                 >
                   Baixar contato
                 </a>
@@ -271,14 +282,15 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
       case 'poll':
         return (
-          <div className="space-y-2">
-            <p className="text-white font-medium">{content}</p>
+          <div className="space-y-1">
+            <p className="font-medium" style={{ color: isMe ? '#ffffff' : colors.text }}>{content}</p>
             {metadata?.options && (
               <div className="space-y-1">
                 {metadata.options.map((option, index) => (
                   <div
                     key={index}
-                    className="bg-white/10 rounded px-3 py-2 text-white text-sm"
+                    className="rounded px-3 py-2 text-sm"
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', color: isMe ? '#ffffff' : colors.text }}
                   >
                     {option}
                   </div>
@@ -289,7 +301,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
         );
 
       default:
-        return <p className="text-white">Tipo de mensagem não suportado</p>;
+        return <p style={{ color: isMe ? '#ffffff' : colors.text }}>Tipo de mensagem não suportado</p>;
     }
   };
 
@@ -307,7 +319,8 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
             <div className="relative">
               <button
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ backgroundColor: colors.bgTertiary, color: colors.text }}
                 title="Reagir"
               >
                 <Smile className="w-4 h-4" />
@@ -315,7 +328,8 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
               {/* Emoji picker */}
               {showEmojiPicker && (
                 <div
-                  className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} bg-gray-800 rounded-lg p-2 shadow-lg z-50`}
+                  className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} rounded-lg p-2 shadow-lg z-50`}
+                  style={{ backgroundColor: colors.bgTertiary }}
                   onMouseLeave={() => setShowEmojiPicker(false)}
                 >
                   <div className="flex gap-1">
@@ -343,14 +357,16 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
             </div>
             <button
               onClick={handleForward}
-              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors"
+              className="p-2 rounded-full transition-colors"
+              style={{ backgroundColor: colors.bgTertiary, color: colors.text }}
               title="Encaminhar"
             >
               <Share className="w-4 h-4" />
             </button>
             <button
               onClick={handleReply}
-              className="p-2 bg-gray-700 hover:bg-gray-600 rounded-full text-white transition-colors"
+              className="p-2 rounded-full transition-colors"
+              style={{ backgroundColor: colors.bgTertiary, color: colors.text }}
               title="Responder"
             >
               <Reply className="w-4 h-4" />
@@ -360,17 +376,19 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
         {/* Bubble principal */}
         <div
-          className={`max-w-[70%] rounded-2xl px-4 py-2 ${isMe ? 'order-2' : 'order-2'} ${
-            isMe
-              ? 'bg-emerald-600 text-white rounded-br-sm'
-              : 'bg-slate-700 text-white rounded-bl-sm'
+          className={`max-w-[70%] rounded-2xl ${isMe ? 'order-2' : 'order-2'} ${
+            message_type !== 'text' ? 'px-2 py-1' : 'px-4 py-2'
           }`}
+          style={{
+            backgroundColor: isMe ? '#005c4b' : colors.bgSecondary,
+            borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
+          }}
         >
           {renderMessageContent()}
-          <div className={`flex items-center justify-between mt-1 ${isMe ? 'text-emerald-100' : 'text-slate-300'}`}>
+          <div className={`flex items-center justify-between mt-1`} style={{ color: isMe ? 'rgba(255,255,255,0.8)' : colors.textSecondary }}>
             <div className="flex items-center space-x-1">
               {message.reactions && message.reactions.length > 0 && (
-                <div className="flex items-center space-x-1 mr-2 bg-black/20 rounded-full px-2 py-0.5">
+                <div className="flex items-center space-x-1 mr-2 rounded-full px-2 py-0.5" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }}>
                   <span className="text-sm">{message.reactions[message.reactions.length - 1]}</span>
                 </div>
               )}
