@@ -1028,7 +1028,7 @@ function Chat() {
   return (
     <div className="h-screen flex bg-white" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
       {/* Coluna Esquerda Fixa (60px) */}
-      <div className="w-[60px] flex flex-col items-center py-3 flex-shrink-0" style={{ backgroundColor: colors.bg }}>
+      <div className="w-[60px] flex flex-col items-center py-3 flex-shrink-0" style={{ backgroundColor: colors.bg4 }}>
         {/* Status da conexão */}
         <div className="mb-6">
           <div
@@ -1198,7 +1198,7 @@ function Chat() {
         {/* Lista de conversas */}
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">
+            <div className="text-center py-8 text-sm" style={{ color: colors.textSecondary }}>
               {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa nesta aba'}
             </div>
           ) : (
@@ -1211,10 +1211,10 @@ function Chat() {
               <div
                 key={conversation.id}
                 onClick={() => isMultiSelectMode ? toggleConversationSelection(conversation.id) : handleSelectConversation(conversation)}
-                className={`flex items-center p-3 cursor-pointer transition-colors border-l-2 ${
+                className={`flex items-center p-3 cursor-pointer transition-colors border-l-2 border-b-2 ${
                   selectedConversation?.id === conversation.id && !isMultiSelectMode ? '' : ''
                 } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? '' : ''} ${borderColor}`}
-                style={{ backgroundColor: selectedConversation?.id === conversation.id && !isMultiSelectMode ? colors.bgTertiary : selectedConversations.has(conversation.id) && isMultiSelectMode ? colors.bgTertiary : undefined }}
+                style={{borderBottomColor: colors.border2 ,backgroundColor: selectedConversation?.id === conversation.id && !isMultiSelectMode ? colors.bgTertiary : selectedConversations.has(conversation.id) && isMultiSelectMode ? colors.bgTertiary : undefined }}
               >
                 {isMultiSelectMode && (
                   <div className="mr-3">
@@ -1240,7 +1240,7 @@ function Chat() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                         </svg>
                       )}
-                      <h3 className="text-white font-medium truncate">{conversation.contact_name || conversation.phone}</h3>
+                      <h3 className="font-medium truncate" style={{ color: colors.text3 }}>{conversation.contact_name || conversation.phone} </h3>
                     </div>
                     <div className="flex items-center">
                       {conversation.tags && conversation.tags.length > 0 && (
@@ -1257,14 +1257,14 @@ function Chat() {
                         </div>
                       )}
                       {conversation.last_message?.timestamp && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs" style={{ color: colors.textSecondary }}>
                           {formatDateTime(conversation.last_message.timestamp)}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <p className="text-gray-400 text-sm truncate">{renderLastMessage(conversation)}</p>
+                    <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{renderLastMessage(conversation)}</p>
                     {conversation.unread_count > 0 && (
                       <span className="bg-emerald-500 text-white text-xs rounded-full px-2 py-0.5 ml-2">
                         {conversation.unread_count}
@@ -1300,7 +1300,7 @@ function Chat() {
                 />
                 <div className="flex-1">
                   <div className="flex items-center mb-1">
-                    <h3 className="text-white font-medium">{selectedConversation.contact_name || selectedConversation.phone}</h3>
+                    <h3 className="font-medium" style={{ color: colors.text }}>{selectedConversation.contact_name || selectedConversation.phone}</h3>
                     {conversationTags.length > 0 && (
                       <div className="flex ml-2">
                         {conversationTags.map((tag, idx) => (
@@ -1402,7 +1402,7 @@ function Chat() {
                   <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
                 </div>
               ) : messagesWithDateBubbles.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
+                <div className="text-center py-8 text-sm" style={{ color: colors.textSecondary }}>
                   Nenhuma mensagem encontrada
                 </div>
               ) : (
@@ -1572,9 +1572,9 @@ function Chat() {
                       onClick={() => {
                         setShowCaptionModal(false);
                         setCaptionInput('');
-                        setAttachmentFile(null);
                       }}
-                      className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                      className="px-4 py-2 transition-colors"
+                      style={{ color: colors.textSecondary }}
                     >
                       Cancelar
                     </button>
@@ -1592,8 +1592,8 @@ function Chat() {
             {/* Modal de Encaminhar */}
             {showForwardModal && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-[#2a3942] rounded-lg p-6 w-[600px] max-h-[80vh] flex flex-col">
-                  <h3 className="text-white text-lg mb-4">Encaminhar mensagem</h3>
+                <div className="rounded-lg p-6 w-[600px] max-h-[80vh] flex flex-col" style={{ backgroundColor: colors.bgTertiary }}>
+                  <h3 className="text-lg mb-4" style={{ color: colors.text }}>Encaminhar mensagem</h3>
 
                   {/* Buscador de contatos */}
                   <div className="mb-4">
@@ -1602,7 +1602,8 @@ function Chat() {
                       placeholder="Buscar contato..."
                       value={forwardSearchQuery}
                       onChange={(e) => setForwardSearchQuery(e.target.value)}
-                      className="w-full bg-[#202c33] text-white placeholder-gray-400 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      style={{ backgroundColor: colors.bgSecondary, color: colors.text, placeholderColor: colors.textSecondary }}
                     />
                   </div>
 
@@ -1638,9 +1639,10 @@ function Chat() {
                           className="w-10 h-10 rounded-full mr-3"
                         />
                         <div className="flex-1">
-                          <p className="text-white font-medium">{conv.contact_name || conv.phone}</p>
+                          <p className="font-medium" style={{ color: colors.text }}>{conv.contact_name || conv.phone}</p>
                           <p 
-                            className="text-gray-400 text-xs"
+                            className="text-xs"
+                            style={{ color: colors.textSecondary }}
                             dangerouslySetInnerHTML={{
                               __html: conv.last_message
                                 ? (conv.last_message.message_type === 'text'
@@ -1655,7 +1657,7 @@ function Chat() {
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <p className="text-gray-400 text-sm">
+                    <p className="text-sm" style={{ color: colors.textSecondary }}>
                       {selectedContactsToForward.length} contato(s) selecionado(s)
                     </p>
                     <div className="flex space-x-3">
@@ -1666,7 +1668,8 @@ function Chat() {
                           setSelectedContactsToForward([]);
                           setForwardSearchQuery('');
                         }}
-                        className="px-4 py-2 text-gray-300 hover:text-white transition-colors"
+                        className="px-4 py-2 transition-colors"
+                        style={{ color: colors.textSecondary }}
                       >
                         Cancelar
                       </button>
@@ -1688,11 +1691,11 @@ function Chat() {
             )}
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-[#0b141a]">
+          <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: colors.bg }}>
             <div className="text-center">
               <img src="/ico.png" alt="Analizap" className="w-32 h-32 mx-auto mb-4 opacity-50" />
-              <h2 className="text-white text-2xl font-light mb-2">Analizap Web</h2>
-              <p className="text-gray-400 text-sm">Selecione uma conversa para começar</p>
+              <h2 className="text-2xl font-light mb-2" style={{ color: colors.text }}>Analizap Web</h2>
+              <p className="text-sm" style={{ color: colors.textSecondary }}>Selecione uma conversa para começar</p>
             </div>
           </div>
         )}
