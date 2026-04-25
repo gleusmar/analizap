@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply } from 'lucide-react';
+import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle } from 'lucide-react';
 
 export function MessageBubble({ message, isMe, onReact, onForward, onReply, onScrollToMessage }) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [modalImage, setModalImage] = useState(null);
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const { message_type, content, metadata, timestamp, is_delivered, is_read } = message;
+  const { message_type, content, metadata, timestamp, is_delivered, is_read, delivery_error } = message;
 
   const formatTime = (dateString) => {
     const date = new Date(dateString);
@@ -15,6 +15,13 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
   const renderDeliveryStatus = () => {
     if (!isMe) return null;
+
+    // Erro na entrega = ícone de alerta vermelho
+    if (delivery_error) {
+      return (
+        <AlertCircle size={16} className="text-red-500 ml-1" title={delivery_error} />
+      );
+    }
 
     // Não entregue = bolinha transparente com bordas cinza
     if (!is_delivered) {

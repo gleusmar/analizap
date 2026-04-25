@@ -67,6 +67,15 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
       }
     });
 
+    // Evento de falha na entrega de mensagem
+    socketInstance.on('whatsapp:message_failed', ({ conversation_id, message_id, error }) => {
+      console.log('Falha na entrega de mensagem:', { conversation_id, message_id, error });
+      if (onMessageReceived) {
+        // Recarregar mensagens para mostrar o erro
+        onMessageReceived(conversation_id, null, false);
+      }
+    });
+
     setSocket(socketInstance);
 
     return () => {

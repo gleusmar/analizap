@@ -233,10 +233,10 @@ export async function sendMessage(req, res) {
       metadata || {}
     )
       .then(async (sentMessage) => {
-        // Atualizar o real_message_id com o ID do Baileys
+        // Atualizar o real_message_id com o ID do Baileys e marcar como entregue
         const { error: updateError } = await supabase
           .from('messages')
-          .update({ real_message_id: sentMessage.key.id })
+          .update({ real_message_id: sentMessage.key.id, is_delivered: true, delivery_error: null })
           .eq('id', savedMessage.id);
 
         if (updateError) {
@@ -247,7 +247,42 @@ export async function sendMessage(req, res) {
       })
       .catch(error => {
         logger.error('Erro ao enviar mensagem para WhatsApp:', error);
+        // Marcar mensagem como falha
+        supabase
+          .from('messages')
+          .update({ delivery_error: error.message || 'Erro ao enviar mensagem' })
+          .eq('id', savedMessage.id)
+          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
       });
+
+    // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
+    setTimeout(async () => {
+      const { data: message } = await supabase
+        .from('messages')
+        .select('real_message_id, delivery_error')
+        .eq('id', savedMessage.id)
+        .single();
+
+      // Se ainda não tem real_message_id e não tem erro de entrega, marca como falha
+      if (message && !message.real_message_id && !message.delivery_error) {
+        await supabase
+          .from('messages')
+          .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
+          .eq('id', savedMessage.id);
+
+        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
+
+        // Emitir evento para o frontend sobre a falha
+        const io = getIO();
+        if (io) {
+          io.emit('whatsapp:message_failed', {
+            conversation_id: conversationId,
+            message_id: savedMessage.id,
+            error: 'Tempo esgotado: não recebeu confirmação do WhatsApp'
+          });
+        }
+      }
+    }, 30000); // 30 segundos
 
     // Responder imediatamente ao frontend
     res.json({
@@ -503,7 +538,7 @@ export async function sendAttachment(req, res) {
     // Atualizar o real_message_id em background
     supabase
       .from('messages')
-      .update({ real_message_id: sentMessage.key.id })
+      .update({ real_message_id: sentMessage.key.id, is_delivered: true, delivery_error: null })
       .eq('id', savedMessage.id)
       .then(({ error }) => {
         if (error) {
@@ -511,7 +546,43 @@ export async function sendAttachment(req, res) {
         } else {
           logger.info('real_message_id atualizado para anexo:', sentMessage.key.id);
         }
+      })
+      .catch(error => {
+        logger.error('Erro ao enviar anexo para WhatsApp:', error);
+        // Marcar mensagem como falha
+        supabase
+          .from('messages')
+          .update({ delivery_error: error.message || 'Erro ao enviar anexo' })
+          .eq('id', savedMessage.id)
+          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
       });
+
+    // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
+    setTimeout(async () => {
+      const { data: message } = await supabase
+        .from('messages')
+        .select('real_message_id, delivery_error')
+        .eq('id', savedMessage.id)
+        .single();
+
+      if (message && !message.real_message_id && !message.delivery_error) {
+        await supabase
+          .from('messages')
+          .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
+          .eq('id', savedMessage.id);
+
+        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
+
+        const io = getIO();
+        if (io) {
+          io.emit('whatsapp:message_failed', {
+            conversation_id: conversationId,
+            message_id: savedMessage.id,
+            error: 'Tempo esgotado: não recebeu confirmação do WhatsApp'
+          });
+        }
+      }
+    }, 30000);
 
     res.json({
       success: true,
@@ -578,7 +649,7 @@ export async function sendLocation(req, res) {
     // Atualizar o real_message_id em background
     supabase
       .from('messages')
-      .update({ real_message_id: sentMessage.key.id })
+      .update({ real_message_id: sentMessage.key.id, is_delivered: true, delivery_error: null })
       .eq('id', savedMessage.id)
       .then(({ error }) => {
         if (error) {
@@ -586,7 +657,43 @@ export async function sendLocation(req, res) {
         } else {
           logger.info('real_message_id atualizado para localização:', sentMessage.key.id);
         }
+      })
+      .catch(error => {
+        logger.error('Erro ao enviar localização para WhatsApp:', error);
+        // Marcar mensagem como falha
+        supabase
+          .from('messages')
+          .update({ delivery_error: error.message || 'Erro ao enviar localização' })
+          .eq('id', savedMessage.id)
+          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
       });
+
+    // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
+    setTimeout(async () => {
+      const { data: message } = await supabase
+        .from('messages')
+        .select('real_message_id, delivery_error')
+        .eq('id', savedMessage.id)
+        .single();
+
+      if (message && !message.real_message_id && !message.delivery_error) {
+        await supabase
+          .from('messages')
+          .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
+          .eq('id', savedMessage.id);
+
+        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
+
+        const io = getIO();
+        if (io) {
+          io.emit('whatsapp:message_failed', {
+            conversation_id: conversationId,
+            message_id: savedMessage.id,
+            error: 'Tempo esgotado: não recebeu confirmação do WhatsApp'
+          });
+        }
+      }
+    }, 30000);
 
     res.json({
       success: true,
