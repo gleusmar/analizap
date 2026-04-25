@@ -194,80 +194,67 @@ export async function sendMessage(req, res) {
       formattedContent = `*_${user.nickname}_*\n${content}`;
     }
 
-    // Enviar mensagem para o WhatsApp
-    const sentMessage = await sendWhatsAppMessage(
-      sock,
-      conversationId,
-      formattedContent,
-      message_type || MESSAGE_TYPES.TEXT,
-      metadata || {}
-    );
+    // Gerar ID temporário para a mensagem
+    const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Emitir mensagem temporária apenas para mensagens de texto (não para imagens/anexos)
-    // Para imagens/anexos, esperar o processamento da mídia para evitar flicker
-    const io = getIO();
-    const isMedia = [MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
-                     MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(message_type || MESSAGE_TYPES.TEXT);
-
-    if (io && !isMedia) {
-      const tempMessage = {
-        id: null,
-        message_id: sentMessage.key.id,
-        conversation_id: conversationId,
-        from_me: true,
-        message_type: message_type || MESSAGE_TYPES.TEXT,
-        content: formattedContent,
-        metadata: metadata || {},
-        timestamp: new Date().toISOString(),
-        is_read: false,
-        is_delivered: false
-      };
-
-      io.emit('whatsapp:message', {
-        conversation_id: conversationId,
-        message: tempMessage,
-        is_temp: true
-      });
-    }
-
-    // Responder imediatamente ao frontend
-    res.json({
-      success: true,
-      message: 'Mensagem enviada',
-      sentMessage
-    });
-
-    // Salvar mensagem no banco de dados em background (não await)
-    saveMessage({
+    // Salvar mensagem com ID temporário antes de enviar para o WhatsApp
+    const savedMessage = await saveMessage({
       conversation_id: conversationId,
-      message_id: sentMessage.key.id,
+      message_id: tempMessageId,
       from_me: true,
       message_type: message_type || MESSAGE_TYPES.TEXT,
       content: formattedContent,
       metadata: metadata || {},
       timestamp: new Date().toISOString()
-    })
-      .then(savedMessage => {
-        // Atualizar last_message_at da conversa
-        supabase
-          .from('conversations')
-          .update({ last_message_at: new Date().toISOString() })
-          .eq('id', conversationId)
-          .catch(error => logger.error('Erro ao atualizar last_message_at:', error));
+    });
 
-        // Emitir evento com a mensagem salva (não é temporária)
-        const io = getIO();
-        if (io) {
-          io.emit('whatsapp:message', {
-            conversation_id: conversationId,
-            message: savedMessage,
-            is_temp: false
-          });
+    // Atualizar last_message_at da conversa
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conversationId);
+
+    // Emitir mensagem para o frontend (não é temporária, já está salva)
+    const io = getIO();
+    if (io) {
+      io.emit('whatsapp:message', {
+        conversation_id: conversationId,
+        message: savedMessage,
+        is_temp: false
+      });
+    }
+
+    // Enviar mensagem para o WhatsApp em background (não await)
+    sendWhatsAppMessage(
+      sock,
+      conversationId,
+      formattedContent,
+      message_type || MESSAGE_TYPES.TEXT,
+      metadata || {}
+    )
+      .then(async (sentMessage) => {
+        // Atualizar o real_message_id com o ID do Baileys
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({ real_message_id: sentMessage.key.id })
+          .eq('id', savedMessage.id);
+
+        if (updateError) {
+          logger.error('Erro ao atualizar real_message_id:', updateError);
+        } else {
+          logger.info('real_message_id atualizado:', sentMessage.key.id);
         }
       })
       .catch(error => {
-        logger.error('Erro ao salvar mensagem em background:', error);
+        logger.error('Erro ao enviar mensagem para WhatsApp:', error);
       });
+
+    // Responder imediatamente ao frontend
+    res.json({
+      success: true,
+      message: 'Mensagem enviada',
+      savedMessage
+    });
   } catch (error) {
     logger.error('Erro ao enviar mensagem:', {
       message: error.message,
@@ -483,10 +470,13 @@ export async function sendAttachment(req, res) {
       .from('whatsapp-media')
       .getPublicUrl(fileName);
 
-    // Salvar mensagem no banco de dados com a URL do arquivo
+    // Gerar ID temporário para a mensagem
+    const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Salvar mensagem com ID temporário
     const savedMessage = await saveMessage({
       conversation_id: conversationId,
-      message_id: sentMessage.key.id,
+      message_id: tempMessageId,
       from_me: true,
       message_type: sentMessage.messageType,
       content: publicUrl,
@@ -500,7 +490,7 @@ export async function sendAttachment(req, res) {
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    // Emitir evento para o frontend
+    // Emitir mensagem para o frontend (não é temporária)
     const io = getIO();
     if (io) {
       io.emit('whatsapp:message', {
@@ -510,10 +500,23 @@ export async function sendAttachment(req, res) {
       });
     }
 
+    // Atualizar o real_message_id em background
+    supabase
+      .from('messages')
+      .update({ real_message_id: sentMessage.key.id })
+      .eq('id', savedMessage.id)
+      .then(({ error }) => {
+        if (error) {
+          logger.error('Erro ao atualizar real_message_id:', error);
+        } else {
+          logger.info('real_message_id atualizado para anexo:', sentMessage.key.id);
+        }
+      });
+
     res.json({
       success: true,
       message: 'Anexo enviado',
-      sentMessage
+      savedMessage
     });
   } catch (error) {
     logger.error('Erro ao enviar anexo:', error);
@@ -542,10 +545,13 @@ export async function sendLocation(req, res) {
       longitude
     );
 
-    // Salvar mensagem no banco de dados
+    // Gerar ID temporário para a mensagem
+    const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Salvar mensagem com ID temporário
     const savedMessage = await saveMessage({
       conversation_id: conversationId,
-      message_id: sentMessage.key.id,
+      message_id: tempMessageId,
       from_me: true,
       message_type: MESSAGE_TYPES.LOCATION,
       content: sentMessage.content,
@@ -559,19 +565,33 @@ export async function sendLocation(req, res) {
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    // Emitir evento para o frontend
+    // Emitir mensagem para o frontend (não é temporária)
     const io = getIO();
     if (io) {
       io.emit('whatsapp:message', {
         conversation_id: conversationId,
-        message: savedMessage
+        message: savedMessage,
+        is_temp: false
       });
     }
+
+    // Atualizar o real_message_id em background
+    supabase
+      .from('messages')
+      .update({ real_message_id: sentMessage.key.id })
+      .eq('id', savedMessage.id)
+      .then(({ error }) => {
+        if (error) {
+          logger.error('Erro ao atualizar real_message_id:', error);
+        } else {
+          logger.info('real_message_id atualizado para localização:', sentMessage.key.id);
+        }
+      });
 
     res.json({
       success: true,
       message: 'Localização enviada',
-      sentMessage
+      savedMessage
     });
   } catch (error) {
     logger.error('Erro ao enviar localização:', error);
