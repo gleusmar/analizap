@@ -408,7 +408,27 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       return null;
     }
 
+    // Verificar se a mensagem tem conteúdo real
+    const hasContent = msg.conversation ||
+                      msg.extendedTextMessage ||
+                      msg.imageMessage ||
+                      msg.audioMessage ||
+                      msg.videoMessage ||
+                      msg.documentMessage ||
+                      msg.stickerMessage ||
+                      msg.locationMessage ||
+                      msg.contactMessage ||
+                      msg.buttonsMessage ||
+                      msg.listMessage ||
+                      msg.templateMessage;
+
+    if (!hasContent) {
+      logger.warn('Mensagem sem conteúdo reconhecido, ignorando:', Object.keys(msg));
+      return null;
+    }
+
     // Ignorar mensagens antigas se syncPeriodDays estiver definido
+    // (após verificar conteúdo, para não criar conversas para mensagens sem conteúdo)
     if (messageTimestamp && syncPeriodDays) {
       const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
       const cutoffDate = new Date();
@@ -418,31 +438,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         logger.debug(`Mensagem antiga (${messageDate.toISOString()}), ignorando (período: ${syncPeriodDays} dias)`);
         return null;
       }
-    }
-
-    // Verificar se a mensagem tem conteúdo real
-    const hasContent = msg.conversation ||
-                      msg.extendedTextMessage ||
-                      msg.imageMessage ||
-                      msg.audioMessage ||
-                      msg.videoMessage ||
-                      msg.documentMessage ||
-                      msg.locationMessage ||
-                      msg.contactMessage ||
-                      msg.stickerMessage || 
-                      msg.pollCreationMessage;
-    
-    if (!hasContent) {
-      logger.debug('Mensagem sem conteúdo reconhecível, ignorando');
-      return null;
-    }
-    if (
-      remoteJid.endsWith('@g.us') ||
-      remoteJid.endsWith('@broadcast') ||
-      remoteJid.endsWith('@newsletter') ||
-      (remoteJid.endsWith('@s.whatsapp.net') && remoteJid.includes('status'))
-    ) {
-      return null;
     }
 
     // Extrai LID e JID da mensagem
