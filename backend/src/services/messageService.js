@@ -54,6 +54,8 @@ export function getPrimaryIdentifier(lid, jid = null) {
  */
 export async function saveLidMapping(lid, jid, phone) {
   try {
+    logger.debug('Salvando mapeamento LID->JID', { lid, jid, phone });
+
     const { error } = await supabase.rpc('save_lid_mapping', {
       p_lid: lid,
       p_jid: jid,
@@ -64,6 +66,8 @@ export async function saveLidMapping(lid, jid, phone) {
       logger.error('Erro ao salvar mapeamento LID->JID:', error);
       throw error;
     }
+
+    logger.debug('Mapeamento LID->JID salvo com sucesso', { lid, jid, phone });
   } catch (error) {
     logger.error('Erro ao salvar mapeamento LID->JID:', error);
     throw error;
@@ -256,6 +260,11 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
     // Cria nova conversa
     logger.debug('Criando nova conversa', { phone, contactName });
+    // Usa messageTimestamp para last_message_at se disponível, senão data atual
+    const lastMessageAt = messageTimestamp
+      ? new Date(messageTimestamp * 1000).toISOString()
+      : new Date().toISOString();
+
     const { data: newConversation, error: createError } = await supabase
       .from('conversations')
       .insert({
@@ -263,7 +272,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
         contact_name: contactName || phone, // Usa phone como fallback se não tiver nome
         profile_picture_url: profilePictureUrl,
         is_open: true,
-        last_message_at: new Date().toISOString()
+        last_message_at: lastMessageAt
       })
       .select()
       .single();
@@ -457,7 +466,10 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     // Salva mapeamento se tiver ambos LID e JID
     if (lid && jid && jid.endsWith('@s.whatsapp.net')) {
       const phone = extractPhoneFromJid(jid);
+      logger.debug('Condição para saveLidMapping atendida', { lid, jid, phone });
       await saveLidMapping(lid, jid, phone);
+    } else {
+      logger.debug('Condição para saveLidMapping NÃO atendida', { lid, jid, hasLid: !!lid, hasJid: !!jid, isJidValid: jid?.endsWith('@s.whatsapp.net') });
     }
 
     // Determina o identificador principal para usar na conversa
@@ -467,6 +479,14 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     // Obtém ou cria conversa
     // Prioridade: notifyName (nome do avatar) > pushName > phone
     const contactName = notifyName || pushName || null;
+
+    logger.debug('Nomes disponíveis para conversa', {
+      phone,
+      notifyName,
+      pushName,
+      contactName
+    });
+
     const conversation = await getOrCreateConversation(
       primaryIdentifier,
       contactName,
