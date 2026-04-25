@@ -94,12 +94,14 @@ export const tagsAPI = {
 };
 
 export const connectionAPI = {
-  connect: (syncPeriodDays = 7) => api.post('/whatsapp/connect', { syncPeriodDays }),
+  connect: (syncPeriodDays = null) => api.post('/whatsapp/connect', { syncPeriodDays }),
   disconnect: () => api.post('/whatsapp/disconnect'),
   getStatus: () => api.get('/whatsapp/status'),
   checkSession: () => api.get('/whatsapp/session'),
   getQR: () => api.get('/whatsapp/qr'),
   refreshQR: () => api.post('/whatsapp/qr/refresh'),
+  saveSyncSettings: (syncHistory, syncPeriodDays) => api.post('/whatsapp/sync-settings', { syncHistory, syncPeriodDays }),
+  loadSyncSettings: () => api.get('/whatsapp/sync-settings'),
 };
 
 export const predefinedMessagesAPI = {

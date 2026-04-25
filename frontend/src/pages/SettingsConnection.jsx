@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { useToast } from '../components/Toast';
 import { useTheme } from '../contexts/ThemeContext';
+import { connectionAPI } from '../services/api';
 
 function SettingsConnection() {
   const { connectionStatus, qrCode, phoneNumber, connect, disconnect, refreshQR } = useWhatsApp();
@@ -9,14 +10,60 @@ function SettingsConnection() {
   const { colors } = useTheme();
   const [connectionMessage, setConnectionMessage] = useState('');
   const [connectionProgress, setConnectionProgress] = useState(0);
-  const [syncPeriodDays, setSyncPeriodDays] = useState(0); // Padrão: Não sincronizar histórico
+  const [syncHistory, setSyncHistory] = useState(false); // Toggle para sincronizar histórico
+  const [syncPeriodDays, setSyncPeriodDays] = useState(7); // Período de sincronização em dias
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  // Carregar configurações de sincronização do banco ao montar
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await connectionAPI.loadSyncSettings();
+        if (response.data.success) {
+          const settings = response.data.settings;
+          setSyncHistory(settings.sync_history);
+          setSyncPeriodDays(settings.sync_period_days);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar configurações de sincronização:', err);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  // Salvar configurações de sincronização quando alterar
+  const handleSyncHistoryChange = async (value) => {
+    setSyncHistory(value);
+    try {
+      await connectionAPI.saveSyncSettings(value, value ? syncPeriodDays : 0);
+      success('Configurações salvas');
+    } catch (err) {
+      console.error('Erro ao salvar configurações:', err);
+      error('Erro ao salvar configurações');
+    }
+  };
+
+  const handleSyncPeriodDaysChange = async (value) => {
+    setSyncPeriodDays(value);
+    try {
+      await connectionAPI.saveSyncSettings(syncHistory, value);
+      success('Configurações salvas');
+    } catch (err) {
+      console.error('Erro ao salvar configurações:', err);
+      error('Erro ao salvar configurações');
+    }
+  };
 
   const handleConnect = async () => {
     try {
       setConnectionProgress(10);
       setConnectionMessage('Iniciando conexão...');
 
-      await connect(syncPeriodDays);
+      // Passa syncPeriodDays apenas se syncHistory for true, caso contrário passa 0
+      await connect(syncHistory ? syncPeriodDays : 0);
       setConnectionMessage('Conexão iniciada. Aguarde o QR Code...');
 
       // Simulação de progresso (será substituído pela lógica real)
@@ -140,32 +187,63 @@ function SettingsConnection() {
           </div>
         )}
 
-        {/* Sync Period Selector */}
-        {connectionStatus === 'disconnected' && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
-              Período de Sincronização
-            </label>
-            <select
-              value={syncPeriodDays}
-              onChange={(e) => setSyncPeriodDays(parseInt(e.target.value))}
-              className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              style={{ backgroundColor: colors.bgTertiary, color: colors.text, borderColor: colors.border }}
-            >
-              <option value={0}>Não sincronizar histórico</option>
-              <option value={1}>1 dia</option>
-              <option value={3}>3 dias</option>
-              <option value={7}>7 dias (recomendado)</option>
-              <option value={15}>15 dias</option>
-              <option value={30}>30 dias</option>
-            </select>
-            <p className="text-xs mt-1" style={{ color: colors.textSecondary }}>
-              {syncPeriodDays === 0
-                ? 'Nenhuma mensagem antiga será importada, apenas novas mensagens'
-                : 'Mensagens mais antigas que este período não serão importadas'}
-            </p>
-          </div>
-        )}
+        {/* Sync Settings */}
+        <div className="mb-4">
+          {loadingSettings ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium" style={{ color: colors.text }}>
+                  Sincronizar Histórico
+                </label>
+                <button
+                  onClick={() => handleSyncHistoryChange(!syncHistory)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    syncHistory ? 'bg-emerald-600' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      syncHistory ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {syncHistory && (
+                <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.bgTertiary }}>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.text }}>
+                    Período de Sincronização (dias)
+                  </label>
+                  <select
+                    value={syncPeriodDays}
+                    onChange={(e) => handleSyncPeriodDaysChange(parseInt(e.target.value))}
+                    className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    style={{ backgroundColor: colors.bgSecondary, color: colors.text, borderColor: colors.border }}
+                  >
+                    <option value={1}>1 dia</option>
+                    <option value={3}>3 dias</option>
+                    <option value={7}>7 dias (recomendado)</option>
+                    <option value={15}>15 dias</option>
+                    <option value={30}>30 dias</option>
+                  </select>
+                  <p className="text-xs mt-2" style={{ color: colors.textSecondary }}>
+                    Mensagens mais antigas que este período não serão importadas
+                  </p>
+                </div>
+              )}
+
+              {!syncHistory && (
+                <p className="text-xs mt-2" style={{ color: colors.textSecondary }}>
+                  Nenhuma mensagem antiga será importada, apenas novas mensagens
+                </p>
+              )}
+            </>
+          )}
+        </div>
 
         {/* Action Buttons */}
         <div className="flex space-x-3">
