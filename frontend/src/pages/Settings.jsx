@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useTheme } from '../contexts/ThemeContext';
 
 function Settings() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { colors } = useTheme();
 
   const menuItems = [
     ...(user?.role === 'admin' ? [{ path: '/settings/users', label: 'Usuários', icon: 'users' }] : []),
@@ -50,22 +52,23 @@ function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b141a]">
+    <div className="min-h-screen" style={{ backgroundColor: colors.bg }}>
       {/* Header */}
-      <nav className="bg-[#202c33] border-b border-gray-700">
+      <nav className="border-b" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14">
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="text-sm text-gray-300 hover:text-emerald-400 flex items-center space-x-2 transition-colors"
+                className="text-sm flex items-center space-x-2 transition-colors"
+                style={{ color: colors.textSecondary }}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
                 <span>Voltar</span>
               </button>
-              <h1 className="text-lg font-semibold text-white">Configurações</h1>
+              <h1 className="text-lg font-semibold" style={{ color: colors.text }}>Configurações</h1>
             </div>
           </div>
         </div>
@@ -73,7 +76,7 @@ function Settings() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className={`${sidebarOpen ? 'w-56' : 'w-0'} bg-[#111b21] border-r border-gray-700 transition-all duration-300 overflow-hidden`}>
+        <aside className={`${sidebarOpen ? 'w-56' : 'w-0'} border-r transition-all duration-300 overflow-hidden`} style={{ backgroundColor: colors.bg, borderColor: colors.border }}>
           <nav className="p-3">
             <ul className="space-y-1">
               {menuItems.map((item) => (
@@ -83,8 +86,9 @@ function Settings() {
                     className={`flex items-center space-x-3 px-3 py-2 rounded-md text-sm transition-colors ${
                       isActive(item.path)
                         ? 'bg-emerald-600/30 text-emerald-400 font-medium'
-                        : 'text-gray-300 hover:bg-[#202c33]'
+                        : ''
                     }`}
+                    style={{ color: !isActive(item.path) ? colors.textSecondary : undefined }}
                   >
                     {getIcon(item.icon)}
                     <span>{item.label}</span>
@@ -100,7 +104,8 @@ function Settings() {
           <div className="flex items-center mb-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="mr-3 p-1.5 rounded-md hover:bg-[#202c33] text-gray-400 transition-colors"
+              className="mr-3 p-1.5 rounded-md transition-colors"
+              style={{ backgroundColor: undefined, color: colors.textSecondary }}
             >
               {sidebarOpen ? (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,11 +117,11 @@ function Settings() {
                 </svg>
               )}
             </button>
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold" style={{ color: colors.text }}>
               {menuItems.find((item) => isActive(item.path))?.label || 'Configurações'}
             </h2>
           </div>
-          <div className="bg-[#111b21] rounded-lg border border-gray-700 shadow-sm p-6">
+          <div className="rounded-lg border shadow-sm p-6" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
             <Outlet />
           </div>
         </main>

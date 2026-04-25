@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import { useTheme } from '../contexts/ThemeContext';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -11,6 +12,7 @@ function Login() {
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
   const { success, error, warning } = useToast();
+  const { colors } = useTheme();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,31 +35,33 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg border border-slate-200 shadow-sm w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: colors.bg }}>
+      <div className="p-8 rounded-lg border shadow-sm w-full max-w-md" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold text-slate-800">Analizap</h1>
-          <p className="text-sm text-slate-600 mt-1">Entre com suas credenciais</p>
+          <h1 className="text-2xl font-semibold" style={{ color: colors.text }}>Analizap</h1>
+          <p className="text-sm mt-1" style={{ color: colors.textSecondary }}>Entre com suas credenciais</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Email</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: colors.text }}>Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              style={{ backgroundColor: colors.bg, color: colors.text, borderColor: colors.border }}
               placeholder="seu@email.com"
               required
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Senha</label>
+            <label className="block text-xs font-medium mb-1" style={{ color: colors.text }}>Senha</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              style={{ backgroundColor: colors.bg, color: colors.text, borderColor: colors.border }}
               placeholder="••••••••"
               required
             />
