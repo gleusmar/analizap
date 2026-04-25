@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { usersAPI, departmentsAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import { useTheme } from '../contexts/ThemeContext';
 
 function SettingsUsers() {
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
   const [showModal, setShowModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -191,9 +193,9 @@ function SettingsUsers() {
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-b border-gray-700 hover:bg-[#202c33]">
-                <td className="py-2 px-3 text-white">{user.name}</td>
-                <td className="py-2 px-3 text-gray-400">{user.email}</td>
+              <tr key={user.id} className="border-b hover:cursor-pointer transition-colors" style={{ borderColor: colors.border }}>
+                <td className="py-2 px-3" style={{ color: colors.text }}>{user.name}</td>
+                <td className="py-2 px-3" style={{ color: colors.textSecondary }}>{user.email}</td>
                 <td className="py-2 px-3 text-gray-400">{user.nickname || '-'}</td>
                 <td className="py-2 px-3 text-gray-400">{user.department?.name || '-'}</td>
                 <td className="py-2 px-3">
@@ -261,8 +263,8 @@ function SettingsUsers() {
       {/* Modal de Criar/Editar */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#111b21] rounded-lg p-5 w-full max-w-md border border-gray-700">
-            <h3 className="text-base font-semibold text-white mb-4">
+          <div className="rounded-lg p-5 w-full max-w-md border" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+            <h3 className="text-base font-semibold mb-4" style={{ color: colors.text }}>
               {selectedUser ? 'Editar Usuário' : 'Novo Usuário'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-3">
@@ -272,7 +274,8 @@ function SettingsUsers() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-600 bg-[#202c33] text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  style={{ backgroundColor: colors.bgTertiary, color: colors.text, borderColor: colors.border }}
                   required
                 />
               </div>
