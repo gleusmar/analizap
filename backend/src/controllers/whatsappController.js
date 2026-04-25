@@ -28,13 +28,19 @@ export async function connect(req, res) {
       }
     }
 
-    // Cria o socket
-    await createWhatsAppSocket();
+    // Obtém período de sincronização do corpo da requisição (padrão: 7 dias)
+    const { syncPeriodDays = 7 } = req.body;
+
+    logger.info(`Período de sincronização configurado: ${syncPeriodDays} dias`);
+
+    // Cria o socket com o período de sincronização
+    await createWhatsAppSocket('default', syncPeriodDays);
 
     res.json({
       success: true,
       message: 'Conexão iniciada',
-      status: getConnectionStatus()
+      status: getConnectionStatus(),
+      syncPeriodDays
     });
   } catch (error) {
     logger.error('Erro ao conectar ao WhatsApp:', error);

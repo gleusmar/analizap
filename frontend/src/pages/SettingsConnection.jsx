@@ -7,13 +7,14 @@ function SettingsConnection() {
   const { success, error } = useToast();
   const [connectionMessage, setConnectionMessage] = useState('');
   const [connectionProgress, setConnectionProgress] = useState(0);
+  const [syncPeriodDays, setSyncPeriodDays] = useState(7);
 
   const handleConnect = async () => {
     try {
       setConnectionProgress(10);
       setConnectionMessage('Iniciando conexão...');
 
-      await connect();
+      await connect(syncPeriodDays);
       setConnectionMessage('Conexão iniciada. Aguarde o QR Code...');
 
       // Simulação de progresso (será substituído pela lógica real)
@@ -134,6 +135,29 @@ function SettingsConnection() {
         {connectionMessage && (
           <div className="bg-[#202c33] rounded-lg p-3 mb-4">
             <p className="text-sm text-gray-400">{connectionMessage}</p>
+          </div>
+        )}
+
+        {/* Sync Period Selector */}
+        {connectionStatus === 'disconnected' && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Período de Sincronização
+            </label>
+            <select
+              value={syncPeriodDays}
+              onChange={(e) => setSyncPeriodDays(parseInt(e.target.value))}
+              className="w-full bg-[#202c33] text-white border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value={1}>1 dia</option>
+              <option value={3}>3 dias</option>
+              <option value={7}>7 dias (recomendado)</option>
+              <option value={15}>15 dias</option>
+              <option value={30}>30 dias</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Mensagens mais antigas que este período não serão importadas
+            </p>
           </div>
         )}
 

@@ -24,6 +24,7 @@ let qrCode = null;
 let sessionId = 'default';
 let io = null;
 let saveCredsFunction = null;
+let syncPeriodDays = 7; // Período de sincronização em dias (padrão: 7)
 
 // Sistema de exponential backoff para reconexão
 let reconnectAttempts = 0;
@@ -50,11 +51,12 @@ export function setSocketIO(socketIOInstance) {
 /**
  * Cria o socket do WhatsApp
  */
-export async function createWhatsAppSocket(sessionIdParam = 'default') {
+export async function createWhatsAppSocket(sessionIdParam = 'default', syncPeriodDaysParam = 7) {
   sessionId = sessionIdParam;
+  syncPeriodDays = syncPeriodDaysParam; // Define o período de sincronização
 
   try {
-    logger.info(`Criando socket WhatsApp para sessão: ${sessionId}`);
+    logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
 
     // Usa useMultiFileAuthState para autenticação (padrão do Baileys)
     const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
@@ -287,10 +289,10 @@ function setupEvents(socket) {
 
         if (!existingMessage) {
           logger.info('Processando mensagem enviada:', { messageId, remoteJid });
-          
+
           // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
           const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
-          const processedMessage = await processWhatsAppMessage(message, sock);
+          const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
           logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
 
@@ -550,7 +552,7 @@ async function processMessageBatch() {
 
       // Processar mensagem (processWhatsAppMessage vai criar a conversa se necessário)
       const { processWhatsAppMessage } = await import('../services/messageService.js');
-      const processedMessage = await processWhatsAppMessage(message, sock);
+      const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
       // Se a mensagem não foi processada (null), continua para a próxima
       if (!processedMessage) continue;
@@ -741,7 +743,7 @@ async function handleIncomingMessage(message) {
     }
 
     // Processa e salva a mensagem no banco de dados em background (não await)
-    processWhatsAppMessage(message, sock)
+    processWhatsAppMessage(message, sock, syncPeriodDays)
       .then(savedMessage => {
         if (!savedMessage) return;
 

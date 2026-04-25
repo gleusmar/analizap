@@ -208,7 +208,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .from('conversations')
       .insert({
         phone,
-        contact_name: contactName,
+        contact_name: contactName || phone, // Usa phone como fallback se não tiver nome
         profile_picture_url: profilePictureUrl,
         is_open: true,
         last_message_at: new Date().toISOString()
@@ -320,7 +320,7 @@ export async function saveMessage(messageData) {
 /**
  * Processa e salva uma mensagem do WhatsApp
  */
-export async function processWhatsAppMessage(message, sock = null) {
+export async function processWhatsAppMessage(message, sock = null, syncPeriodDays = 7) {
   try {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
@@ -343,15 +343,27 @@ export async function processWhatsAppMessage(message, sock = null) {
       return null;
     }
 
+    // Verificar período de sincronização - ignorar mensagens mais antigas
+    if (messageTimestamp) {
+      const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
+
+      if (messageDate < cutoffDate) {
+        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), ignorando (período: ${syncPeriodDays} dias)`);
+        return null;
+      }
+    }
+
     // Verificar se a mensagem tem conteúdo real
-    const hasContent = msg.conversation || 
-                      msg.extendedTextMessage || 
-                      msg.imageMessage || 
-                      msg.audioMessage || 
-                      msg.videoMessage || 
-                      msg.documentMessage || 
-                      msg.locationMessage || 
-                      msg.contactMessage || 
+    const hasContent = msg.conversation ||
+                      msg.extendedTextMessage ||
+                      msg.imageMessage ||
+                      msg.audioMessage ||
+                      msg.videoMessage ||
+                      msg.documentMessage ||
+                      msg.locationMessage ||
+                      msg.contactMessage ||
                       msg.stickerMessage || 
                       msg.pollCreationMessage;
     
