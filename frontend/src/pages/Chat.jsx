@@ -56,7 +56,7 @@ function Chat() {
 
   // Hooks para dados reais
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
-  const { messages, loading: loadingMessages, refresh: refreshMessages } = useConversationMessages(selectedConversation?.id);
+  const { messages, loading: loadingMessages, refresh: refreshMessages, hasMore, loadMore } = useConversationMessages(selectedConversation?.id);
 
   // Integrar com Socket.io para receber mensagens em tempo real
   const handleMessageReceived = useCallback((conversationId, message, isTemp = false) => {
@@ -170,7 +170,7 @@ function Chat() {
     }
   }, []);
 
-  // Detectar se está no final do scroll
+  // Detectar se está no final do scroll e lazy loading ao rolar para o topo
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -179,11 +179,18 @@ function Chat() {
       const { scrollTop, scrollHeight, clientHeight } = container;
       const threshold = 100; // 100px de tolerância
       setIsAtBottom(scrollHeight - scrollTop - clientHeight < threshold);
+
+      // Lazy loading: carregar mais mensagens quando rolar até 80% do topo
+      const scrollPercentage = scrollTop / (scrollHeight - clientHeight);
+      if (scrollPercentage > 0.8 && hasMore && !loadingMessages) {
+        console.log('Lazy loading triggered', { scrollPercentage, hasMore, loadingMessages });
+        loadMore();
+      }
     };
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [hasMore, loadingMessages, loadMore]);
 
   // Scrollar para o final quando a conversa é selecionada
   useEffect(() => {
