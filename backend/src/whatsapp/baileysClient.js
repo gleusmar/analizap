@@ -66,7 +66,10 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
 
     // Usa useMultiFileAuthState para autenticação (padrão do Baileys)
-    const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
+    // No Railway, o volume está montado em /app/backend/auth_info
+    const authPath = process.env.RAILWAY
+      ? path.join('/app', 'backend', 'auth_info', sessionId)
+      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
     const authStateResult = await useMultiFileAuthState(authPath);
 
     const { state, saveCreds } = authStateResult;
@@ -986,7 +989,9 @@ export async function disconnectSocket() {
 export async function removeSession() {
   try {
     await disconnectSocket();
-    const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
+    const authPath = process.env.RAILWAY
+      ? path.join('/app', 'backend', 'auth_info', sessionId)
+      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
     if (fs.existsSync(authPath)) {
       await rm(authPath, { recursive: true, force: true });
     }
@@ -1001,7 +1006,9 @@ export async function removeSession() {
  * Verifica se existe uma sessão salva
  */
 export function hasSessionSaved() {
-  const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
+  const authPath = process.env.RAILWAY
+    ? path.join('/app', 'backend', 'auth_info', sessionId)
+    : path.join(__dirname, '..', '..', 'auth_info', sessionId);
   return fs.existsSync(authPath);
 }
 
