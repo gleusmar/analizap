@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, CheckSquare, Square } from 'lucide-react';
+import { X, CheckSquare, Square, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -51,6 +51,8 @@ function Chat() {
   // Estados para múltipla seleção
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedConversations, setSelectedConversations] = useState(new Set());
+  // Estado de loading ao selecionar conversa
+  const [loadingConversation, setLoadingConversation] = useState(false);
 
   // Hooks para dados reais
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
@@ -151,6 +153,13 @@ function Chat() {
   useEffect(() => {
     setSocketMessages({});
   }, [selectedConversation?.id]);
+
+  // Desativar loading quando mensagens carregarem
+  useEffect(() => {
+    if (!loadingMessages && selectedConversation) {
+      setLoadingConversation(false);
+    }
+  }, [loadingMessages, selectedConversation]);
 
   const { connectionStatus } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
 
@@ -335,6 +344,8 @@ function Chat() {
   };
 
   const handleSelectConversation = async (conversation) => {
+    setLoadingConversation(true);
+
     // Limpar mensagens otimistas da conversa anterior
     if (selectedConversation?.id !== conversation.id) {
       setOptimisticMessages(prev => ({
@@ -412,7 +423,7 @@ function Chat() {
 
     try {
       for (const conversationId of selectedConversations) {
-        await conversationsAPI.closeConversation(conversationId);
+        await conversationsAPI.close(conversationId);
       }
 
       toast.success(`${selectedConversations.size} conversa(s) encerrada(s)`);
@@ -1112,13 +1123,18 @@ function Chat() {
               {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa nesta aba'}
             </div>
           ) : (
-            filteredConversations.map(conversation => (
+            filteredConversations.map(conversation => {
+              // Determinar cor da borda baseado na última mensagem
+              const lastMessageFromMe = conversation.last_message?.from_me;
+              const borderColor = lastMessageFromMe ? 'bg-gray-400' : 'bg-orange-400';
+
+              return (
               <div
                 key={conversation.id}
                 onClick={() => isMultiSelectMode ? toggleConversationSelection(conversation.id) : handleSelectConversation(conversation)}
-                className={`flex items-center p-3 hover:bg-[#202c33] cursor-pointer transition-colors ${
+                className={`flex items-center p-3 hover:bg-[#202c33] cursor-pointer transition-colors border-l-2 ${
                   selectedConversation?.id === conversation.id && !isMultiSelectMode ? 'bg-[#2a3942]' : ''
-                } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? 'bg-[#2a3942]' : ''}`}
+                } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? 'bg-[#2a3942]' : ''} ${borderColor}`}
               >
                 {isMultiSelectMode && (
                   <div className="mr-3">
@@ -1177,7 +1193,8 @@ function Chat() {
                   </div>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -1298,7 +1315,11 @@ function Chat() {
 
             {/* Área de mensagens */}
             <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-[#0b141a]">
-              {messagesWithDateBubbles.length === 0 ? (
+              {loadingConversation ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+                </div>
+              ) : messagesWithDateBubbles.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
                   Nenhuma mensagem encontrada
                 </div>

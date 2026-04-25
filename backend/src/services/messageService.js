@@ -136,10 +136,23 @@ export async function fetchProfilePicture(sock, jid) {
 /**
  * Obtém ou cria uma conversa
  */
-export async function getOrCreateConversation(jid, contactName = null, profilePictureUrl = null, lid = null, sock = null) {
+export async function getOrCreateConversation(jid, contactName = null, profilePictureUrl = null, lid = null, sock = null, messageTimestamp = null) {
   let phone = extractPhoneFromJid(jid);
 
   try {
+    // Verificar período de sincronização para criação de novas conversas
+    if (messageTimestamp && syncPeriodDays) {
+      const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
+
+      if (messageDate < cutoffDate) {
+        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), não cria/atualiza conversa (período: ${syncPeriodDays} dias)`);
+        // Retorna null para indicar que não deve criar/atualizar a conversa
+        return null;
+      }
+    }
+
     // Se o jid for um LID, tenta obter o JID mapeado
     if (jid && jid.endsWith('@lid')) {
       const mappedJid = await getJidFromLid(jid);
@@ -322,7 +335,7 @@ export async function saveMessage(messageData) {
  */
 export async function processWhatsAppMessage(message, sock = null, syncPeriodDays = 7) {
   try {
-    const { key, message: msg, pushName, messageTimestamp } = message;
+    const { key, message: msg, pushName, messageTimestamp, notifyName } = message;
     const remoteJid = key.remoteJid;
     const fromMe = key.fromMe;
 
@@ -409,13 +422,22 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     const phone = extractPhoneFromJid(primaryIdentifier);
 
     // Obtém ou cria conversa
+    // Prioridade: notifyName (nome do avatar) > pushName > phone
+    const contactName = notifyName || pushName || null;
     const conversation = await getOrCreateConversation(
       primaryIdentifier,
-      pushName || null, // pushName geralmente é o nome salvo pelo usuário
+      contactName,
       null, // profile picture pode ser obtido depois
       lid,
-      sock // passa sock para buscar foto de perfil
+      sock, // passa sock para buscar foto de perfil
+      messageTimestamp // passa timestamp para verificar período de sincronização
     );
+
+    // Se a conversa não foi criada (mensagem antiga), retorna null
+    if (!conversation) {
+      logger.debug('Conversa não criada/atualizada (mensagem antiga)');
+      return null;
+    }
 
     // Determina o tipo de mensagem e extrai conteúdo
     let messageType = MESSAGE_TYPES.TEXT;

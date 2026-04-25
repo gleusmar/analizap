@@ -35,8 +35,14 @@ export function useConversations() {
 
       // Se não tem cache ou expirou, busca do servidor
       const response = await conversationsAPI.getAll();
-      setConversations(response.data.conversations || []);
-      localStorage.setItem(cacheKey, JSON.stringify(response.data.conversations || []));
+      // Ordena explicitamente por last_message_at descending
+      const sortedConversations = (response.data.conversations || []).sort((a, b) => {
+        if (!a.last_message_at) return 1;
+        if (!b.last_message_at) return -1;
+        return new Date(b.last_message_at) - new Date(a.last_message_at);
+      });
+      setConversations(sortedConversations);
+      localStorage.setItem(cacheKey, JSON.stringify(sortedConversations));
       localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
     } catch (err) {
       setError('Erro ao carregar conversas');
@@ -62,8 +68,14 @@ export function useConversations() {
     try {
       // Busca direto do servidor sem cache
       const response = await conversationsAPI.getAll();
-      setConversations(response.data.conversations || []);
-      localStorage.setItem(cacheKey, JSON.stringify(response.data.conversations || []));
+      // Ordena explicitamente por last_message_at descending
+      const sortedConversations = (response.data.conversations || []).sort((a, b) => {
+        if (!a.last_message_at) return 1;
+        if (!b.last_message_at) return -1;
+        return new Date(b.last_message_at) - new Date(a.last_message_at);
+      });
+      setConversations(sortedConversations);
+      localStorage.setItem(cacheKey, JSON.stringify(sortedConversations));
       localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
     } catch (err) {
       setError('Erro ao carregar conversas');

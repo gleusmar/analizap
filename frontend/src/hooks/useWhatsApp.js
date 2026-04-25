@@ -100,7 +100,7 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
 
   const connect = useCallback(async (syncPeriodDays = 7) => {
     try {
-      await connectionAPI.connect({ syncPeriodDays });
+      await connectionAPI.connect(syncPeriodDays);
       setConnectionStatus('connecting');
     } catch (error) {
       console.error('Erro ao conectar:', error);
