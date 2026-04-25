@@ -45,10 +45,12 @@ export const ThemeProvider = ({ children }) => {
     primary: '#00a884',
     primaryHover: '#008f6f',
     danger: '#dc2626',
-    dangerHover: '#b91c1c'
+    dangerHover: '#b91c1c',
+    meMessageBg: '#005c4b',
+    meMessageText: '#ffffff'
   } : {
     bg: '#ffffff',
-    bgSecondary: '#efeae2',
+    bgSecondary: '#f0f2f5',
     bgTertiary: '#e4e6eb',
     bg4: '#f0f2f5',
     text: '#111b21',
@@ -59,7 +61,9 @@ export const ThemeProvider = ({ children }) => {
     primary: '#00a884',
     primaryHover: '#008f6f',
     danger: '#dc2626',
-    dangerHover: '#b91c1c'
+    dangerHover: '#b91c1c',
+    meMessageBg: '#d9fdd3',
+    meMessageText: '#111b21'
   };
 
   return (
