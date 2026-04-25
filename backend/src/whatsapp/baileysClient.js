@@ -597,84 +597,100 @@ function setupEvents(socket) {
 
         const phone = remoteJid.split('@')[0];
 
-        // Verificar se mensagem já existe
+        // Verificar se mensagem já existe (por message_id ou real_message_id)
         const { data: existingMessage } = await supabase
           .from('messages')
-          .select('id')
-          .eq('message_id', messageId)
+          .select('id, message_id, real_message_id')
+          .or(`message_id.eq.${messageId},real_message_id.eq.${messageId}`)
           .single();
 
-        if (!existingMessage) {
-          logger.info('Processando mensagem enviada:', { messageId, remoteJid });
+        if (existingMessage) {
+          logger.info('Mensagem já existe (message_id ou real_message_id), atualizando status:', {
+            messageId,
+            existingMessageId: existingMessage.id,
+            existingMessageId: existingMessage.message_id,
+            existingRealMessageId: existingMessage.real_message_id
+          });
 
-          // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
-          const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
+          // Atualizar status para entregue se necessário
+          await supabase
+            .from('messages')
+            .update({ is_delivered: true })
+            .eq('id', existingMessage.id);
 
-          logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
+          return; // Não processar novamente
+        }
 
-          const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
+        logger.info('Processando mensagem enviada:', { messageId, remoteJid });
 
-          logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
+        // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
+        const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
 
-          // Se a mensagem foi processada, atualiza para garantir que é from_me = true
-          if (processedMessage) {
-            await supabase
-              .from('messages')
-              .update({ from_me: true })
-              .eq('message_id', messageId);
+        logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
 
-            logger.info('Emitindo evento whatsapp:message para o frontend:', { 
-              messageId, 
-              conversation_id: processedMessage.conversation_id 
+        const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
+
+        logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
+
+        // Se a mensagem foi processada, atualiza para garantir que é from_me = true
+        if (processedMessage) {
+          await supabase
+            .from('messages')
+            .update({ from_me: true })
+            .eq('message_id', messageId);
+
+          logger.info('Emitindo evento whatsapp:message para o frontend:', {
+            messageId,
+            conversation_id: processedMessage.conversation_id
+          });
+
+          // Emitir evento imediatamente para o frontend (mesmo antes da mídia ser processada)
+          if (io) {
+            io.emit('whatsapp:message', {
+              conversation_id: processedMessage.conversation_id,
+              message: processedMessage
             });
+          } else {
+            logger.warn('Socket.io não disponível para emitir mensagem');
+          }
 
-            // Emitir evento imediatamente para o frontend (mesmo antes da mídia ser processada)
-            if (io) {
-              io.emit('whatsapp:message', {
-                conversation_id: processedMessage.conversation_id,
-                message: processedMessage
-              });
-            } else {
-              logger.warn('Socket.io não disponível para emitir mensagem');
-            }
+          // Se tiver mídia, processa em background e atualiza depois
+          if (message.message) {
+            const messageTypeSaved = processedMessage.message_type;
+            if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
+                 MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
+              // Processa mídia em background para não bloquear
+              const { processMessageMedia } = await import('../services/mediaService.js');
+              processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
+                .then(async (publicUrl) => {
+                  // Atualiza a mensagem com a URL do Supabase
+                  const { createClient } = await import('@supabase/supabase-js');
+                  const supabaseClient = createClient(
+                    process.env.SUPABASE_URL,
+                    process.env.SUPABASE_SERVICE_KEY
+                  );
 
-            // Se tiver mídia, processa em background e atualiza depois
-            if (message.message) {
-              const messageTypeSaved = processedMessage.message_type;
-              if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
-                   MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
-                // Processa mídia em background para não bloquear
-                const { processMessageMedia } = await import('../services/mediaService.js');
-                processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
-                  .then(async (publicUrl) => {
-                    // Atualiza a mensagem com a URL do Supabase
-                    const { createClient } = await import('@supabase/supabase-js');
-                    const supabaseClient = createClient(
-                      process.env.SUPABASE_URL,
-                      process.env.SUPABASE_SERVICE_KEY
-                    );
+                  const { error } = await supabaseClient
+                    .from('messages')
+                    .update({ content: publicUrl })
+                    .eq('message_id', processedMessage.message_id);
 
-                    const { error } = await supabaseClient
-                      .from('messages')
-                      .update({ content: publicUrl })
-                      .eq('message_id', processedMessage.message_id);
-
-                    if (error) {
-                      logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
-                    } else {
-                      // Emitir evento de atualização de mensagem quando a mídia for processada
-                      if (io) {
-                        io.emit('whatsapp:message_updated', {
-                          conversation_id: processedMessage.conversation_id,
-                          message_id: processedMessage.message_id,
-                          content: publicUrl
-                        });
-                      }
+                  if (error) {
+                    logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
+                  } else {
+                    // Emitir evento de atualização de mensagem quando a mídia for processada
+                    if (io) {
+                      io.emit('whatsapp:message_updated', {
+                        conversation_id: processedMessage.conversation_id,
+                        message_id: processedMessage.message_id,
+                        content: publicUrl
+                      });
                     }
-                  })
-                  .catch(error => {
-                    logger.error('Erro ao processar mídia:', error);
-                  });
+                  }
+                })
+                .catch(error => {
+                  logger.error('Erro ao processar mídia:', error);
+                });
               }
             }
           }

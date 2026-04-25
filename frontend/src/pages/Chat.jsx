@@ -1506,7 +1506,8 @@ function Chat() {
                   value={messageInput}
                   onChange={handleMessageInputChange}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className={`flex-1 bg-transparent text-white placeholder-gray-400 text-sm focus:outline-none ${isRecording ? 'text-red-400' : ''}`}
+                  className={`flex-1 bg-transparent placeholder-gray-400 text-sm focus:outline-none ${isRecording ? 'text-red-400' : ''}`}
+                  style={{ color: isRecording ? undefined : colors.text }}
                   disabled={isRecording}
                 />
 
