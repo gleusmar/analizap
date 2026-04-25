@@ -340,6 +340,33 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     const authPath = process.env.RAILWAY
       ? path.join('/app', 'backend', 'auth_info', sessionId)
       : path.join(__dirname, '..', '..', 'auth_info', sessionId);
+
+    // Verifica se há sessão salva no banco e restaura para o sistema de arquivos se necessário
+    const savedCreds = await loadAuthFromDB();
+    const hasFile = fs.existsSync(authPath);
+
+    if (savedCreds && !hasFile) {
+      logger.info('Sessão salva encontrada no banco, restaurando para o sistema de arquivos...');
+      // Cria o diretório se não existir
+      fs.mkdirSync(authPath, { recursive: true });
+      
+      // Salva as credenciais do banco no arquivo
+      const credsPath = path.join(authPath, 'creds.json');
+      fs.writeFileSync(credsPath, JSON.stringify(savedCreds, null, 2));
+      
+      // Carrega as chaves do banco e salva no sistema de arquivos
+      const keys = await getAllKeysFromDB();
+      for (const type in keys) {
+        for (const id in keys[type]) {
+          const keyPath = path.join(authPath, type, `${id}.json`);
+          fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+          fs.writeFileSync(keyPath, JSON.stringify(keys[type][id], null, 2));
+        }
+      }
+      
+      logger.info('Sessão restaurada do banco para o sistema de arquivos com sucesso');
+    }
+
     const authStateResult = await useMultiFileAuthState(authPath);
 
     const { state, saveCreds } = authStateResult;
