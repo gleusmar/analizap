@@ -1099,7 +1099,7 @@ function Chat() {
               placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-32 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             <button
               onClick={toggleMultiSelectMode}

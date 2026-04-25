@@ -250,12 +250,25 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
   try {
     logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
 
-    // Usa useDBAuthState para persistência no banco de dados
-    const authStateResult = useDBAuthState();
+    // Usa useMultiFileAuthState para autenticação (padrão do Baileys)
+    // No Railway, o volume está montado em /app/backend/auth_info
+    const authPath = process.env.RAILWAY
+      ? path.join('/app', 'backend', 'auth_info', sessionId)
+      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
+    const authStateResult = await useMultiFileAuthState(authPath);
 
     const { state, saveCreds } = authStateResult;
 
-    saveCredsFunction = saveCreds;
+    // Wrapper para saveCreds que também salva no banco de dados
+    saveCredsFunction = async (creds) => {
+      await saveCreds(creds);
+      // Salvar também no banco de dados como backup
+      try {
+        await saveAuthToDB(creds);
+      } catch (error) {
+        logger.error('Erro ao salvar creds no banco (continuando com arquivo):', error);
+      }
+    };
 
     // Fetch the latest version of WA Web and Baileys
     const { version, isLatest } = await fetchLatestBaileysVersion();
@@ -1171,20 +1184,32 @@ export async function removeSession() {
   try {
     await disconnectSocket();
 
-    // Deletar do banco de dados
-    const { error: authError } = await supabase
-      .from('whatsapp_auth')
-      .delete()
-      .eq('session_id', sessionId);
-
-    if (authError) {
-      logger.error('Erro ao deletar auth do banco:', authError);
-      throw authError;
+    // Remover arquivo
+    const authPath = process.env.RAILWAY
+      ? path.join('/app', 'backend', 'auth_info', sessionId)
+      : path.join(__dirname, '..', '..', 'auth_info', sessionId);
+    if (fs.existsSync(authPath)) {
+      await rm(authPath, { recursive: true, force: true });
     }
 
-    await deleteAllKeysFromDB();
+    // Deletar do banco de dados
+    try {
+      const { error: authError } = await supabase
+        .from('whatsapp_auth')
+        .delete()
+        .eq('session_id', sessionId);
 
-    logger.info('Sessão removida do banco com sucesso');
+      if (authError) {
+        logger.error('Erro ao deletar auth do banco:', authError);
+        // Não throw, continuar mesmo se falhar
+      }
+
+      await deleteAllKeysFromDB();
+    } catch (error) {
+      logger.error('Erro ao deletar do banco (continuando):', error);
+    }
+
+    logger.info('Sessão removida com sucesso');
   } catch (error) {
     logger.error('Erro ao remover sessão:', error);
     throw error;
@@ -1195,6 +1220,17 @@ export async function removeSession() {
  * Verifica se existe uma sessão salva
  */
 export async function hasSessionSaved() {
+  // Verifica primeiro no arquivo (mais rápido)
+  const authPath = process.env.RAILWAY
+    ? path.join('/app', 'backend', 'auth_info', sessionId)
+    : path.join(__dirname, '..', '..', 'auth_info', sessionId);
+  const hasFile = fs.existsSync(authPath);
+
+  if (hasFile) {
+    return true;
+  }
+
+  // Se não tem arquivo, verifica no banco de dados
   try {
     const { data, error } = await supabase
       .from('whatsapp_auth')

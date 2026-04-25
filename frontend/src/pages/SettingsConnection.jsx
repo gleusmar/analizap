@@ -7,7 +7,7 @@ function SettingsConnection() {
   const { success, error } = useToast();
   const [connectionMessage, setConnectionMessage] = useState('');
   const [connectionProgress, setConnectionProgress] = useState(0);
-  const [syncPeriodDays, setSyncPeriodDays] = useState(7);
+  const [syncPeriodDays, setSyncPeriodDays] = useState(0); // Padrão: Não sincronizar histórico
 
   const handleConnect = async () => {
     try {
