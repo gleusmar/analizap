@@ -9,6 +9,22 @@ const supabase = createClient(
 );
 
 const BUCKET_NAME = 'whatsapp-media';
+let syncPeriodDays = 7; // Período padrão de sincronização em dias
+
+/**
+ * Define o período de sincronização em dias
+ */
+export function setSyncPeriodDays(days) {
+  syncPeriodDays = days;
+  logger.info(`Período de sincronização definido para ${days} dias`);
+}
+
+/**
+ * Obtém o período de sincronização atual
+ */
+export function getSyncPeriodDays() {
+  return syncPeriodDays;
+}
 
 /**
  * Normaliza JID para obter o número de telefone
@@ -139,6 +155,13 @@ export async function fetchProfilePicture(sock, jid) {
 export async function getOrCreateConversation(jid, contactName = null, profilePictureUrl = null, lid = null, sock = null, messageTimestamp = null) {
   let phone = extractPhoneFromJid(jid);
 
+  logger.debug('getOrCreateConversation chamada', {
+    phone,
+    contactName,
+    messageTimestamp,
+    syncPeriodDays
+  });
+
   try {
     // Se o jid for um LID, tenta obter o JID mapeado
     if (jid && jid.endsWith('@lid')) {
@@ -156,6 +179,12 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .select('*')
       .eq('phone', phone)
       .single();
+
+    logger.debug('Busca de conversa existente', {
+      phone,
+      found: !!existingConversation,
+      error: findError?.message
+    });
 
     if (existingConversation) {
       // Se a conversa já existe, retorna imediatamente (não verifica período)
@@ -206,6 +235,13 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
 
+      logger.debug('Verificando período de sincronização', {
+        messageDate: messageDate.toISOString(),
+        cutoffDate: cutoffDate.toISOString(),
+        syncPeriodDays,
+        isOld: messageDate < cutoffDate
+      });
+
       if (messageDate < cutoffDate) {
         logger.debug(`Mensagem antiga (${messageDate.toISOString()}), não cria nova conversa (período: ${syncPeriodDays} dias)`);
         // Retorna null para indicar que não deve criar nova conversa
@@ -219,6 +255,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
     }
 
     // Cria nova conversa
+    logger.debug('Criando nova conversa', { phone, contactName });
     const { data: newConversation, error: createError } = await supabase
       .from('conversations')
       .insert({
@@ -236,6 +273,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       throw createError;
     }
 
+    logger.info('Nova conversa criada com sucesso', { phone, conversationId: newConversation.id });
     return newConversation;
   } catch (error) {
     logger.error('Erro ao obter ou criar conversa:', error);
@@ -335,8 +373,11 @@ export async function saveMessage(messageData) {
 /**
  * Processa e salva uma mensagem do WhatsApp
  */
-export async function processWhatsAppMessage(message, sock = null, syncPeriodDays = 7) {
+export async function processWhatsAppMessage(message, sock = null, syncPeriodDaysParam = 7) {
   try {
+    // Define o período de sincronização globalmente
+    setSyncPeriodDays(syncPeriodDaysParam);
+
     const { key, message: msg, pushName, messageTimestamp, notifyName } = message;
     const remoteJid = key.remoteJid;
     const fromMe = key.fromMe;
@@ -354,12 +395,12 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       remoteJid.endsWith('@newsletter') ||
       (remoteJid.endsWith('@s.whatsapp.net') && remoteJid.includes('status'))
     ) {
-      logger.debug('Mensagem de grupo/status/newsletter, ignorando:', remoteJid);
+      logger.info('🚫 Mensagem de grupo/broadcast/newsletter/status ignorada:', remoteJid);
       return null;
     }
 
-    // Verificar período de sincronização - ignorar mensagens mais antigas
-    if (messageTimestamp) {
+    // Ignorar mensagens antigas se syncPeriodDays estiver definido
+    if (messageTimestamp && syncPeriodDays) {
       const messageDate = new Date(messageTimestamp * 1000); // timestamp em segundos
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
