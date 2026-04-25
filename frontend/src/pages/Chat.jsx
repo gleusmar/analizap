@@ -16,7 +16,7 @@ function Chat() {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const toast = useToast();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme, colors } = useTheme();
 
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
@@ -1028,7 +1028,7 @@ function Chat() {
   return (
     <div className="h-screen flex bg-white" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
       {/* Coluna Esquerda Fixa (60px) */}
-      <div className="w-[60px] bg-[#111b21] flex flex-col items-center py-3 flex-shrink-0">
+      <div className="w-[60px] flex flex-col items-center py-3 flex-shrink-0" style={{ backgroundColor: colors.bg }}>
         {/* Status da conexão */}
         <div className="mb-6">
           <div
@@ -1095,14 +1095,14 @@ function Chat() {
 
       {/* Coluna Central (Lista de conversas) - Ajustável */}
       <div 
-        className="bg-[#111b21] flex flex-col flex-shrink-0"
-        style={{ width: `${sidebarWidth}px` }}
+        className="flex flex-col flex-shrink-0"
+        style={{ width: `${sidebarWidth}px`, backgroundColor: colors.bg }}
       >
         {/* Header com logo e busca */}
-        <div className="p-3 bg-[#202c33]">
+        <div className="p-3" style={{ backgroundColor: colors.bgSecondary }}>
           <div className="flex items-center mb-3">
             <img src="/ico.png" alt="Analizap" className="w-8 h-8 mr-2" />
-            <h1 className="text-white text-lg font-semibold">Analizap</h1>
+            <h1 className="text-lg font-semibold" style={{ color: colors.text }}>Analizap</h1>
           </div>
           <div className="flex space-x-2 mb-3">
             <input
@@ -1110,13 +1110,15 @@ function Chat() {
               placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="flex-1 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2"
+              style={{ backgroundColor: colors.bgTertiary, color: colors.text, placeholderColor: colors.textSecondary }}
             />
             <button
               onClick={toggleMultiSelectMode}
               className={`px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isMultiSelectMode ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+                isMultiSelectMode ? 'bg-emerald-600 text-white' : ''
               }`}
+              style={{ backgroundColor: !isMultiSelectMode ? colors.bg : undefined, color: !isMultiSelectMode ? colors.textSecondary : 'white' }}
               title={isMultiSelectMode ? 'Sair do modo de seleção' : 'Seleção múltipla'}
             >
               {isMultiSelectMode ? <CheckSquare size={18} /> : <Square size={18} />}
@@ -1124,8 +1126,9 @@ function Chat() {
             <button
               onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
               className={`px-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                sortOrder === 'desc' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+                sortOrder === 'desc' ? 'bg-emerald-600 text-white' : ''
               }`}
+              style={{ backgroundColor: sortOrder !== 'desc' ? colors.bg : undefined, color: sortOrder !== 'desc' ? colors.textSecondary : 'white' }}
               title={`Ordenar: ${sortOrder === 'desc' ? 'Mais recente primeiro' : 'Mais antiga primeiro'}`}
             >
               <ArrowUpDown size={18} />
@@ -1135,24 +1138,27 @@ function Chat() {
             <button
               onClick={() => setActiveTab('open')}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'open' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+                activeTab === 'open' ? 'bg-emerald-600 text-white' : ''
               }`}
+              style={{ backgroundColor: activeTab !== 'open' ? colors.bg : undefined, color: activeTab !== 'open' ? colors.textSecondary : 'white' }}
             >
               Abertas
             </button>
             <button
               onClick={() => setActiveTab('closed')}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'closed' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+                activeTab === 'closed' ? 'bg-emerald-600 text-white' : ''
               }`}
+              style={{ backgroundColor: activeTab !== 'closed' ? colors.bg : undefined, color: activeTab !== 'closed' ? colors.textSecondary : 'white' }}
             >
               Fechadas
             </button>
             <button
               onClick={() => setActiveTab('all')}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'all' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+                activeTab === 'all' ? 'bg-emerald-600 text-white' : ''
               }`}
+              style={{ backgroundColor: activeTab !== 'all' ? colors.bg : undefined, color: activeTab !== 'all' ? colors.textSecondary : 'white' }}
             >
               Todas
             </button>
@@ -1178,7 +1184,7 @@ function Chat() {
 
         {/* Indicador de busca */}
         {searchQuery && (
-          <div className="px-3 py-2 bg-[#202c33] text-xs text-gray-400">
+          <div className="px-3 py-2 text-xs" style={{ backgroundColor: colors.bgSecondary, color: colors.textSecondary }}>
             {filteredConversations.length} resultado{filteredConversations.length !== 1 ? 's' : ''} encontrado{filteredConversations.length !== 1 ? 's' : ''}
             <button
               onClick={() => setSearchQuery('')}
@@ -1205,9 +1211,10 @@ function Chat() {
               <div
                 key={conversation.id}
                 onClick={() => isMultiSelectMode ? toggleConversationSelection(conversation.id) : handleSelectConversation(conversation)}
-                className={`flex items-center p-3 hover:bg-[#202c33] cursor-pointer transition-colors border-l-2 ${
-                  selectedConversation?.id === conversation.id && !isMultiSelectMode ? 'bg-[#2a3942]' : ''
-                } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? 'bg-[#2a3942]' : ''} ${borderColor}`}
+                className={`flex items-center p-3 cursor-pointer transition-colors border-l-2 ${
+                  selectedConversation?.id === conversation.id && !isMultiSelectMode ? '' : ''
+                } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? '' : ''} ${borderColor}`}
+                style={{ backgroundColor: selectedConversation?.id === conversation.id && !isMultiSelectMode ? colors.bgTertiary : selectedConversations.has(conversation.id) && isMultiSelectMode ? colors.bgTertiary : undefined }}
               >
                 {isMultiSelectMode && (
                   <div className="mr-3">
@@ -1274,16 +1281,17 @@ function Chat() {
 
       {/* Divider para resize */}
       <div
-        className="w-1 bg-[#111b21] cursor-col-resize hover:bg-emerald-500 transition-colors flex-shrink-0"
+        className="w-1 cursor-col-resize hover:bg-emerald-500 transition-colors flex-shrink-0"
+        style={{ backgroundColor: colors.bg }}
         onMouseDown={handleMouseDown}
       />
 
       {/* Coluna Direita (Conversa) */}
-      <div className={`flex-1 flex flex-col bg-[#0b141a] ${showContactPanel ? '' : ''}`}>
+      <div className={`flex-1 flex flex-col ${showContactPanel ? '' : ''}`} style={{ backgroundColor: colors.bg }}>
         {selectedConversation ? (
           <>
             {/* Header da conversa */}
-            <div className="flex items-center justify-between p-3 bg-[#202c33] flex-shrink-0">
+            <div className="flex items-center justify-between p-3 flex-shrink-0" style={{ backgroundColor: colors.bgSecondary }}>
               <div className="flex items-center flex-1 cursor-pointer" onClick={() => setShowContactPanel(true)}>
                 <img
                   src={selectedConversation.profile_picture_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedConversation.phone}`}
@@ -1367,9 +1375,10 @@ function Chat() {
                     placeholder="Buscar na conversa"
                     value={conversationSearchQuery}
                     onChange={(e) => setConversationSearchQuery(e.target.value)}
-                    className="bg-[#2a3942] text-white placeholder-gray-400 rounded-lg py-1.5 pl-8 pr-4 text-xs w-40 focus:outline-none"
+                    className="rounded-lg py-1.5 pl-8 pr-4 text-xs w-40 focus:outline-none"
+                    style={{ backgroundColor: colors.bgTertiary, color: colors.text, placeholderColor: colors.textSecondary }}
                   />
-                  <svg className="w-4 h-4 text-gray-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: colors.textSecondary }}>
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                   {conversationSearchQuery && (
@@ -1387,7 +1396,7 @@ function Chat() {
             </div>
 
             {/* Área de mensagens */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-[#0b141a]">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4" style={{ backgroundColor: colors.bg }}>
               {loadingConversation ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
@@ -1402,7 +1411,7 @@ function Chat() {
                     if (item.type === 'date') {
                       return (
                         <div key={item.id} className="flex justify-center my-4">
-                          <span className="bg-[#1f2c34] text-gray-400 text-xs px-3 py-1 rounded-full">
+                          <span className="text-xs px-3 py-1 rounded-full" style={{ backgroundColor: colors.bgTertiary, color: colors.textSecondary }}>
                             {item.date}
                           </span>
                         </div>
@@ -1425,10 +1434,10 @@ function Chat() {
             </div>
 
             {/* Input de mensagem */}
-            <div className="p-3 bg-[#202c33] flex-shrink-0 relative">
+            <div className="p-3 flex-shrink-0 relative" style={{ backgroundColor: colors.bgSecondary }}>
               {/* Indicador de resposta */}
               {replyingTo && (
-                <div className="mb-2 bg-[#2a3942] rounded-lg px-3 py-2 flex items-center justify-between">
+                <div className="mb-2 rounded-lg px-3 py-2 flex items-center justify-between" style={{ backgroundColor: colors.bgTertiary }}>
                   <div className="flex-1">
                     <p className="text-emerald-500 text-xs font-medium mb-1">
                       Respondendo a {replyingTo.from_me ? 'você' : selectedConversation?.contact_name || selectedConversation?.phone}
@@ -1446,7 +1455,7 @@ function Chat() {
                 </div>
               )}
 
-              <div className="flex items-center bg-[#2a3942] rounded-lg px-4 py-2">
+              <div className="flex items-center rounded-lg px-4 py-2" style={{ backgroundColor: colors.bgTertiary }}>
                 <div className="relative">
                   <button
                     onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
@@ -1460,20 +1469,20 @@ function Chat() {
 
                   {/* Menu de Anexos */}
                   {showAttachmentMenu && (
-                    <div className="attachment-menu absolute bottom-full left-0 mb-2 bg-[#2a3942] rounded-lg shadow-lg py-2 z-10">
-                      <div className="px-3 py-2 hover:bg-[#1f2c34] cursor-pointer text-gray-300 hover:text-white" onClick={() => handleAttachmentSelect('image')}>
+                    <div className="attachment-menu absolute bottom-full left-0 mb-2 rounded-lg shadow-lg py-2 z-10" style={{ backgroundColor: colors.bgTertiary }}>
+                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('image')}>
                         📷 Imagem
                       </div>
-                      <div className="px-3 py-2 hover:bg-[#1f2c34] cursor-pointer text-gray-300 hover:text-white" onClick={() => handleAttachmentSelect('video')}>
+                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('video')}>
                         📹 Vídeo
                       </div>
-                      <div className="px-3 py-2 hover:bg-[#1f2c34] cursor-pointer text-gray-300 hover:text-white" onClick={() => handleAttachmentSelect('audio')}>
+                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('audio')}>
                         🎤 Áudio
                       </div>
-                      <div className="px-3 py-2 hover:bg-[#1f2c34] cursor-pointer text-gray-300 hover:text-white" onClick={() => handleAttachmentSelect('document')}>
+                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('document')}>
                         📎 Documento
                       </div>
-                      <div className="px-3 py-2 hover:bg-[#1f2c34] cursor-pointer text-gray-300 hover:text-white" onClick={() => handleAttachmentSelect('location')}>
+                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('location')}>
                         📍 Localização
                       </div>
                     </div>
@@ -1548,13 +1557,14 @@ function Chat() {
             {/* Modal de Legenda */}
             {showCaptionModal && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div className="bg-[#2a3942] rounded-lg p-6 w-96">
-                  <h3 className="text-white text-lg mb-4">Adicionar legenda (opcional)</h3>
+                <div className="rounded-lg p-6 w-96" style={{ backgroundColor: colors.bgTertiary }}>
+                  <h3 className="text-lg mb-4" style={{ color: colors.text }}>Adicionar legenda (opcional)</h3>
                   <textarea
                     value={captionInput}
                     onChange={(e) => setCaptionInput(e.target.value)}
                     placeholder="Digite uma legenda para o anexo..."
-                    className="w-full bg-[#202c33] text-white placeholder-gray-400 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    className="w-full rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    style={{ backgroundColor: colors.bgSecondary, color: colors.text, placeholderColor: colors.textSecondary }}
                     rows={3}
                   />
                   <div className="flex justify-end space-x-3 mt-4">
