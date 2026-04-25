@@ -1164,6 +1164,14 @@ export async function openConversation(conversationId, sock = null) {
 
           }
         }
+
+        // Se inscrever nas atualizações de presença do contato
+        try {
+          await sock.presenceSubscribe(jid);
+          logger.info('Inscrito nas atualizações de presença:', { jid });
+        } catch (error) {
+          logger.warn('Erro ao se inscrever na presença:', error);
+        }
       } catch (error) {
         logger.warn('Erro ao buscar contato do WhatsApp:', error);
       }

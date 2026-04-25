@@ -6,6 +6,7 @@ import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../se
 import { useToast } from '../components/Toast';
 import { useConversations, useConversationMessages } from '../hooks/useConversations';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import { usePresence } from '../hooks/usePresence';
 import { MessageBubble } from '../components/MessageBubble';
 import ContactPanel from '../components/ContactPanel';
 import EmojiPicker from 'emoji-picker-react';
@@ -166,6 +167,38 @@ function Chat() {
   }, [loadingMessages, selectedConversation]);
 
   const { connectionStatus } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
+  const { getPresence } = usePresence();
+
+  // Função para formatar o status de presença
+  const formatPresenceStatus = useCallback((phone) => {
+    const presenceData = getPresence(phone);
+    const { presence, lastSeen } = presenceData;
+
+    if (presence === 'available') {
+      return 'Online';
+    } else if (presence === 'composing') {
+      return 'Digitando...';
+    } else if (presence === 'recording') {
+      return 'Gravando áudio...';
+    } else if (lastSeen) {
+      const lastSeenDate = new Date(lastSeen);
+      const now = new Date();
+      const diffMinutes = Math.floor((now - lastSeenDate) / (1000 * 60));
+
+      if (diffMinutes < 1) {
+        return 'Visto agora mesmo';
+      } else if (diffMinutes < 60) {
+        return `Visto há ${diffMinutes} minutos`;
+      } else if (diffMinutes < 1440) {
+        const hours = Math.floor(diffMinutes / 60);
+        return `Visto há ${hours} hora${hours > 1 ? 's' : ''}`;
+      } else {
+        return `Visto há ${lastSeenDate.toLocaleDateString('pt-BR')}`;
+      }
+    }
+
+    return null;
+  }, [getPresence]);
 
   // Função para scrollar para o final
   const scrollToBottom = useCallback(() => {
@@ -1264,7 +1297,13 @@ function Chat() {
                     </div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <p className="text-sm truncate" style={{ color: colors.textSecondary }}>{renderLastMessage(conversation)}</p>
+                    <p className="text-sm truncate" style={{ color: colors.textSecondary }}>
+                      {getPresence(conversation.phone)?.presence === 'composing' ? (
+                        <span className="text-emerald-500 font-medium">digitando...</span>
+                      ) : (
+                        renderLastMessage(conversation)
+                      )}
+                    </p>
                     {conversation.unread_count > 0 && (
                       <span className="bg-emerald-500 text-white text-xs rounded-full px-2 py-0.5 ml-2">
                         {conversation.unread_count}
@@ -1322,6 +1361,9 @@ function Chat() {
                         ))}
                       </div>
                     )}
+                  </div>
+                  <div className="text-xs" style={{ color: colors.textSecondary }}>
+                    {formatPresenceStatus(selectedConversation.phone)}
                   </div>
                 </div>
               </div>
@@ -1452,6 +1494,18 @@ function Chat() {
                   >
                     <X className="w-4 h-4" />
                   </button>
+                </div>
+              )}
+
+              {/* Indicador de digitando */}
+              {getPresence(selectedConversation?.phone)?.presence === 'composing' && (
+                <div className="mb-2 rounded-lg px-3 py-2 flex items-center" style={{ backgroundColor: colors.bgTertiary }}>
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                  <span className="ml-2 text-sm" style={{ color: colors.textSecondary }}>digitando...</span>
                 </div>
               )}
 

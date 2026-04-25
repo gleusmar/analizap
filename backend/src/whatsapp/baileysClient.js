@@ -771,6 +771,59 @@ function setupEvents(socket) {
     }
   });
 
+  // Função para salvar/atualizar presença no banco de dados
+  async function savePresenceToDB(phone, presence, lastSeenAt = null) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_KEY
+      );
+
+      const { error } = await supabase
+        .from('contact_presence')
+        .upsert({
+          phone,
+          presence,
+          last_seen_at: lastSeenAt,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'phone'
+        });
+
+      if (error) {
+        logger.error('Erro ao salvar presença no banco:', error);
+      } else {
+        logger.info('Presença salva no banco:', { phone, presence, lastSeenAt });
+      }
+    } catch (error) {
+      logger.error('Erro ao salvar presença no banco:', error);
+    }
+  }
+
+  // Evento de atualização de presença
+  socket.ev.on('presence.update', async (updates) => {
+    for (const { id, presences } of updates) {
+      const phone = id.split('@')[0]; // Extrair phone do JID
+
+      for (const [jid, presence] of Object.entries(presences)) {
+        logger.info('Atualização de presença recebida:', { phone, jid, presence });
+
+        // Salvar no banco de dados
+        await savePresenceToDB(phone, presence.lastKnownPresence);
+
+        // Emitir evento para o frontend
+        if (io) {
+          io.emit('whatsapp:presence_update', {
+            phone,
+            presence: presence.lastKnownPresence,
+            last_seen: presence.lastKnownPresence === 'unavailable' ? new Date().toISOString() : null
+          });
+        }
+      }
+    }
+  });
+
   // Evento de histórico sincronizado
   socket.ev.on('messaging-history.set', async ({ messages }) => {
     // Processar histórico apenas se houver mensagens
