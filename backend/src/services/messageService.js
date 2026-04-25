@@ -176,21 +176,20 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
   try {
     // Se o jid for um LID, tenta obter o JID mapeado
+    let originalLid = null;
     if (jid && jid.endsWith('@lid')) {
+      originalLid = jid;
       const mappedJid = await getJidFromLid(jid);
       if (mappedJid) {
-        // Usa o JID mapeado em vez do LID
         logger.debug('LID mapeado para JID', { lid: jid, mappedJid });
         jid = mappedJid;
         phone = extractPhoneFromJid(jid);
       } else {
-        // Se não tiver mapeamento, usa o LID como phone (com @lid para diferenciar)
         logger.warn('LID não mapeado, usando LID como phone', { lid: jid });
         phone = jid; // Usa o LID completo como identificador
       }
     }
 
-    // Se ainda não tiver phone (ex: jid era null)
     if (!phone) {
       logger.error('Não foi possível extrair phone do JID', { jid });
       return null;
@@ -209,6 +208,48 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       error: findError?.message
     });
 
+    // Se não encontrou pelo phone atual e estamos usando LID, tenta buscar pelo phone do JID mapeado
+    if (!existingConversation && originalLid && phone.endsWith('@lid')) {
+      const mappedJid = await getJidFromLid(originalLid);
+      if (mappedJid) {
+        const mappedPhone = extractPhoneFromJid(mappedJid);
+        if (mappedPhone && mappedPhone !== phone) {
+          logger.debug('Tentando buscar conversa pelo phone do JID mapeado', {
+            originalLid,
+            mappedPhone
+          });
+
+          const { data: conversationByMappedPhone, error: mappedFindError } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('phone', mappedPhone)
+            .single();
+
+          if (conversationByMappedPhone) {
+            logger.info('Conversa encontrada pelo phone do JID mapeado, atualizando phone', {
+              conversationId: conversationByMappedPhone.id,
+              oldPhone: conversationByMappedPhone.phone,
+              newPhone: phone
+            });
+
+            // Atualiza o phone da conversa existente (de phone real para LID, para manter consistência)
+            const { error: phoneUpdateError } = await supabase
+              .from('conversations')
+              .update({ phone: phone })
+              .eq('id', conversationByMappedPhone.id);
+
+            if (phoneUpdateError) {
+              logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+            } else {
+              conversationByMappedPhone.phone = phone; // Atualiza localmente para retorno
+            }
+
+            return conversationByMappedPhone;
+          }
+        }
+      }
+    }
+
     if (existingConversation) {
       // Se a conversa já existe, retorna imediatamente (não verifica período)
       // Isso permite que mensagens antigas sejam adicionadas a conversas existentes
@@ -222,6 +263,26 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
         if (updateError) {
           logger.error('Erro ao reabrir conversa:', updateError);
+        }
+      }
+
+      // Se a conversa foi criada com LID e agora temos o phone correto (do JID), atualiza o phone
+      if (existingConversation.phone.endsWith('@lid') && phone && !phone.endsWith('@lid') && existingConversation.phone !== phone) {
+        logger.debug('Atualizando phone da conversa (de LID para phone real)', {
+          conversationId: existingConversation.id,
+          oldPhone: existingConversation.phone,
+          newPhone: phone
+        });
+
+        const { error: phoneUpdateError } = await supabase
+          .from('conversations')
+          .update({ phone: phone })
+          .eq('id', existingConversation.id);
+
+        if (phoneUpdateError) {
+          logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+        } else {
+          existingConversation.phone = phone; // Atualiza localmente para retorno
         }
       }
 

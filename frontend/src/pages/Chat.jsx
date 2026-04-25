@@ -378,7 +378,7 @@ function Chat() {
     // Marcar mensagens como lidas instantaneamente (remove bubble antes da confirmação)
     if (selected.unread_count > 0) {
       // Atualiza localmente para remover o bubble imediatamente
-      setConversations(prev => prev.map(conv =>
+      setConversationsWithTags(prev => prev.map(conv =>
         conv.id === selected.id ? { ...conv, unread_count: 0 } : conv
       ));
 
@@ -456,7 +456,7 @@ function Chat() {
 
     try {
       // Atualiza localmente para remover os bubbles imediatamente
-      setConversations(prev => prev.map(conv =>
+      setConversationsWithTags(prev => prev.map(conv =>
         selectedConversations.has(conv.id) ? { ...conv, unread_count: 0 } : conv
       ));
 
@@ -1125,6 +1125,13 @@ function Chat() {
             </button>
           </div>
           <div className="flex space-x-2 mb-3">
+            <input
+              type="text"
+              placeholder="Buscar conversa..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
             <button
               onClick={toggleMultiSelectMode}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
