@@ -5,7 +5,8 @@ import {
   getStatus,
   getQR,
   refreshQR,
-  removeSessionController
+  removeSessionController,
+  checkSession
 } from '../controllers/whatsappController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -14,6 +15,7 @@ const router = express.Router();
 // Rotas públicas (sem autenticação) para conexão WhatsApp
 router.post('/connect', connect);
 router.get('/status', getStatus);
+router.get('/session', checkSession);
 router.get('/qr', getQR);
 router.post('/qr/refresh', refreshQR);
 

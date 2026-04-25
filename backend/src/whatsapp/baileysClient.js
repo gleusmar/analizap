@@ -996,3 +996,25 @@ export async function removeSession() {
     throw error;
   }
 }
+
+/**
+ * Verifica se existe uma sessão salva
+ */
+export function hasSessionSaved() {
+  const authPath = path.join(__dirname, '..', '..', 'auth_info', sessionId);
+  return fs.existsSync(authPath);
+}
+
+/**
+ * Tenta reconectar usando a sessão salva (se existir)
+ */
+export async function reconnectWithSavedSession(sessionIdParam = 'default', syncPeriodDaysParam = 7) {
+  if (!hasSessionSaved()) {
+    logger.info('Nenhuma sessão salva encontrada');
+    return false;
+  }
+
+  logger.info('Sessão salva encontrada, tentando reconectar...');
+  await createWhatsAppSocket(sessionIdParam, syncPeriodDaysParam);
+  return true;
+}

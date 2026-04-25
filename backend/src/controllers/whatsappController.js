@@ -5,7 +5,9 @@ import {
   getConnectionStatus,
   getQRCode,
   disconnectSocket,
-  removeSession
+  removeSession,
+  hasSessionSaved,
+  reconnectWithSavedSession
 } from '../whatsapp/baileysClient.js';
 import QRCode from 'qrcode';
 
@@ -33,15 +35,30 @@ export async function connect(req, res) {
 
     logger.info(`Período de sincronização configurado: ${syncPeriodDays} dias`);
 
-    // Cria o socket com o período de sincronização
-    await createWhatsAppSocket('default', syncPeriodDays);
+    // Verifica se existe sessão salva para reconectar automaticamente
+    const hasSavedSession = hasSessionSaved();
+    logger.info(`Sessão salva encontrada: ${hasSavedSession}`);
 
-    res.json({
-      success: true,
-      message: 'Conexão iniciada',
-      status: getConnectionStatus(),
-      syncPeriodDays
-    });
+    if (hasSavedSession) {
+      logger.info('Tentando reconectar usando sessão salva...');
+      await reconnectWithSavedSession('default', syncPeriodDays);
+      res.json({
+        success: true,
+        message: 'Reconectando usando sessão salva',
+        status: getConnectionStatus(),
+        syncPeriodDays
+      });
+    } else {
+      logger.info('Nenhuma sessão salva, criando nova conexão...');
+      // Cria o socket com o período de sincronização
+      await createWhatsAppSocket('default', syncPeriodDays);
+      res.json({
+        success: true,
+        message: 'Conexão iniciada',
+        status: getConnectionStatus(),
+        syncPeriodDays
+      });
+    }
   } catch (error) {
     logger.error('Erro ao conectar ao WhatsApp:', error);
     res.status(500).json({ error: 'Erro ao conectar ao WhatsApp' });
@@ -179,5 +196,22 @@ export async function removeSessionController(req, res) {
   } catch (error) {
     logger.error('Erro ao remover sessão:', error);
     res.status(500).json({ error: 'Erro ao remover sessão' });
+  }
+}
+
+/**
+ * Verifica se existe sessão salva
+ */
+export async function checkSession(req, res) {
+  try {
+    const hasSaved = hasSessionSaved();
+
+    res.json({
+      success: true,
+      hasSession: hasSaved
+    });
+  } catch (error) {
+    logger.error('Erro ao verificar sessão:', error);
+    res.status(500).json({ error: 'Erro ao verificar sessão' });
   }
 }
