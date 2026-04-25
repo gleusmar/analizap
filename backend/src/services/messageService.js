@@ -176,7 +176,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
   try {
     // Se o jid for um LID, tenta obter o JID mapeado
-    let originalLid = null;
+    let originalLid = lid; // Usa o parâmetro lid se fornecido
     if (jid && jid.endsWith('@lid')) {
       originalLid = jid;
       const mappedJid = await getJidFromLid(jid);
@@ -207,6 +207,39 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       found: !!existingConversation,
       error: findError?.message
     });
+
+    // Se não encontrou pelo phone atual e temos um LID associado, tenta buscar conversa pelo LID
+    if (!existingConversation && originalLid) {
+      logger.debug('Tentando buscar conversa pelo LID', { originalLid });
+
+      const { data: lidConversation, error: lidFindError } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('phone', originalLid)
+        .single();
+
+      if (lidConversation) {
+        logger.info('Conversa encontrada pelo LID, atualizando phone para JID real', {
+          conversationId: lidConversation.id,
+          oldPhone: lidConversation.phone,
+          newPhone: phone
+        });
+
+        // Atualiza o phone da conversa existente (de LID para phone real)
+        const { error: phoneUpdateError } = await supabase
+          .from('conversations')
+          .update({ phone: phone })
+          .eq('id', lidConversation.id);
+
+        if (phoneUpdateError) {
+          logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+        } else {
+          lidConversation.phone = phone; // Atualiza localmente para retorno
+        }
+
+        return lidConversation;
+      }
+    }
 
     // Se não encontrou pelo phone atual e estamos usando LID, tenta buscar pelo phone do JID mapeado
     if (!existingConversation && originalLid && phone.endsWith('@lid')) {
@@ -618,6 +651,36 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       const phone = extractPhoneFromJid(jid);
       logger.debug('Condição para saveLidMapping atendida', { lid, jid, phone });
       await saveLidMapping(lid, jid, phone);
+
+      // Após salvar o mapeamento, verificar se existe uma conversa criada com o LID como phone
+      // e atualizá-la para usar o phone real
+      try {
+        const { data: lidConversation } = await supabase
+          .from('conversations')
+          .select('*')
+          .eq('phone', lid)
+          .single();
+
+        if (lidConversation && lidConversation.phone !== phone) {
+          logger.info('Atualizando conversa criada com LID para usar phone real', {
+            conversationId: lidConversation.id,
+            oldPhone: lidConversation.phone,
+            newPhone: phone
+          });
+
+          const { error: updateError } = await supabase
+            .from('conversations')
+            .update({ phone: phone })
+            .eq('id', lidConversation.id);
+
+          if (updateError) {
+            logger.error('Erro ao atualizar phone da conversa LID:', updateError);
+          }
+        }
+      } catch (e) {
+        // Nenhuma conversa com LID encontrada, continua normalmente
+        logger.debug('Nenhuma conversa com LID encontrada para atualizar');
+      }
     } else {
       logger.debug('Condição para saveLidMapping NÃO atendida', { lid, jid, hasLid: !!lid, hasJid: !!jid, isJidValid: jid?.endsWith('@s.whatsapp.net') });
     }
@@ -640,7 +703,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       primaryIdentifier,
       contactName,
       null, // profile picture pode ser obtido depois
-      lid,
+      lid, // passa lid para permitir busca por LID
       sock, // passa sock para buscar foto de perfil
       messageTimestamp // passa timestamp para verificar período de sincronização
     );
