@@ -1214,7 +1214,7 @@ function Chat() {
                 className={`flex items-center p-3 cursor-pointer transition-colors border-l-2 border-b-2 ${
                   selectedConversation?.id === conversation.id && !isMultiSelectMode ? '' : ''
                 } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? '' : ''} ${borderColor}`}
-                style={{borderBottomColor: colors.border2 ,backgroundColor: selectedConversation?.id === conversation.id && !isMultiSelectMode ? colors.bgTertiary : selectedConversations.has(conversation.id) && isMultiSelectMode ? colors.bgTertiary : undefined }}
+                style={{borderBottomColor: colors.border2 ,backgroundColor: selectedConversation?.id === conversation.id && !isMultiSelectMode ? colors.bgTertiary : selectedConversations.has(conversation.id) && isMultiSelectMode ? colors.bgTertiary : colors.bgSecondary }}
               >
                 {isMultiSelectMode && (
                   <div className="mr-3">
