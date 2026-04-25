@@ -26,6 +26,7 @@ let sessionId = 'default';
 let io = null;
 let saveCredsFunction = null;
 let syncPeriodDays = 7; // Período de sincronização em dias (padrão: 7)
+let syncHistory = false; // Flag para sincronizar histórico (padrão: false)
 
 // Funções para persistência de sessão no banco de dados
 async function saveAuthToDB(creds) {
@@ -83,6 +84,67 @@ async function loadAuthFromDB() {
     return null;
   } catch (error) {
     logger.error('Erro ao carregar auth do banco:', error);
+    throw error;
+  }
+}
+
+// Funções para persistência de configurações de sincronização
+async function saveSyncSettings(syncHistoryParam, syncPeriodDaysParam) {
+  try {
+    const { error } = await supabase
+      .from('whatsapp_settings')
+      .upsert({
+        session_id: sessionId,
+        sync_history: syncHistoryParam,
+        sync_period_days: syncPeriodDaysParam,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'session_id'
+      });
+
+    if (error) {
+      logger.error('Erro ao salvar configurações de sincronização no banco:', error);
+      throw error;
+    }
+
+    logger.info('Configurações de sincronização salvas no banco com sucesso');
+  } catch (error) {
+    logger.error('Erro ao salvar configurações de sincronização no banco:', error);
+    throw error;
+  }
+}
+
+async function loadSyncSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_settings')
+      .select('sync_history, sync_period_days')
+      .eq('session_id', sessionId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        logger.info('Nenhuma configuração de sincronização salva no banco, usando padrões');
+        return { sync_history: false, sync_period_days: 7 };
+      }
+      logger.error('Erro ao carregar configurações de sincronização do banco:', error);
+      throw error;
+    }
+
+    if (data) {
+      logger.info('Configurações de sincronização carregadas do banco com sucesso', {
+        sync_history: data.sync_history,
+        sync_period_days: data.sync_period_days
+      });
+      return {
+        sync_history: data.sync_history,
+        sync_period_days: data.sync_period_days
+      };
+    }
+
+    return { sync_history: false, sync_period_days: 7 };
+  } catch (error) {
+    logger.error('Erro ao carregar configurações de sincronização do banco:', error);
     throw error;
   }
 }
@@ -243,18 +305,34 @@ export function setSocketIO(socketIOInstance) {
 /**
  * Cria o socket do WhatsApp
  */
-export async function createWhatsAppSocket(sessionIdParam = 'default', syncPeriodDaysParam = 7) {
+export async function createWhatsAppSocket(sessionIdParam = 'default', syncPeriodDaysParam = null) {
   sessionId = sessionIdParam;
-  syncPeriodDays = syncPeriodDaysParam; // Define o período de sincronização
 
   logger.info('createWhatsAppSocket chamado', {
     sessionId,
-    syncPeriodDaysParam,
-    syncPeriodDays
+    syncPeriodDaysParam
   });
 
   try {
-    logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
+    // Carrega configurações de sincronização do banco
+    const settings = await loadSyncSettings();
+
+    // Se syncPeriodDaysParam for fornecido, usa e salva no banco
+    if (syncPeriodDaysParam !== null) {
+      syncPeriodDays = syncPeriodDaysParam;
+      syncHistory = syncPeriodDaysParam > 0;
+      await saveSyncSettings(syncHistory, syncPeriodDays);
+    } else {
+      // Caso contrário, usa configurações do banco
+      syncPeriodDays = settings.sync_period_days;
+      syncHistory = settings.sync_history;
+      // Se sync_history for false, define syncPeriodDays como 0
+      if (!syncHistory) {
+        syncPeriodDays = 0;
+      }
+    }
+
+    logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias, sync_history: ${syncHistory}`);
 
     // Usa useMultiFileAuthState para autenticação (padrão do Baileys)
     // No Railway, o volume está montado em /app/backend/auth_info
@@ -1262,7 +1340,7 @@ export async function hasSessionSaved() {
 /**
  * Tenta reconectar usando a sessão salva (se existir)
  */
-export async function reconnectWithSavedSession(sessionIdParam = 'default', syncPeriodDaysParam = 7) {
+export async function reconnectWithSavedSession(sessionIdParam = 'default', syncPeriodDaysParam = null) {
   const hasSaved = await hasSessionSaved();
   if (!hasSaved) {
     logger.info('Nenhuma sessão salva encontrada');
@@ -1272,4 +1350,18 @@ export async function reconnectWithSavedSession(sessionIdParam = 'default', sync
   logger.info('Sessão salva encontrada, tentando reconectar...');
   await createWhatsAppSocket(sessionIdParam, syncPeriodDaysParam);
   return true;
+}
+
+/**
+ * Salva configurações de sincronização
+ */
+export async function saveSyncSettingsExport(syncHistoryParam, syncPeriodDaysParam) {
+  return await saveSyncSettings(syncHistoryParam, syncPeriodDaysParam);
+}
+
+/**
+ * Carrega configurações de sincronização
+ */
+export async function loadSyncSettingsExport() {
+  return await loadSyncSettings();
 }

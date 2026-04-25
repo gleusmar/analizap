@@ -7,7 +7,9 @@ import {
   disconnectSocket,
   removeSession,
   hasSessionSaved,
-  reconnectWithSavedSession
+  reconnectWithSavedSession,
+  saveSyncSettingsExport,
+  loadSyncSettingsExport
 } from '../whatsapp/baileysClient.js';
 import QRCode from 'qrcode';
 
@@ -30,10 +32,11 @@ export async function connect(req, res) {
       }
     }
 
-    // Obtém período de sincronização do corpo da requisição (padrão: 7 dias)
-    const { syncPeriodDays = 7 } = req.body;
+    // Obtém período de sincronização do corpo da requisição (opcional)
+    // Se não fornecido, usa configurações do banco
+    const { syncPeriodDays } = req.body;
 
-    logger.info(`Período de sincronização configurado: ${syncPeriodDays} dias`);
+    logger.info(`Período de sincronização fornecido: ${syncPeriodDays}`);
 
     // Verifica se existe sessão salva para reconectar automaticamente
     const hasSavedSession = await hasSessionSaved();
@@ -41,22 +44,21 @@ export async function connect(req, res) {
 
     if (hasSavedSession) {
       logger.info('Tentando reconectar usando sessão salva...');
+      // Se for reconectar, usa configurações do banco (syncPeriodDays = null)
       await reconnectWithSavedSession('default', syncPeriodDays);
       res.json({
         success: true,
         message: 'Reconectando usando sessão salva',
-        status: getConnectionStatus(),
-        syncPeriodDays
+        status: getConnectionStatus()
       });
     } else {
       logger.info('Nenhuma sessão salva, criando nova conexão...');
-      // Cria o socket com o período de sincronização
+      // Cria o socket com o período de sincronização fornecido (ou do banco se null)
       await createWhatsAppSocket('default', syncPeriodDays);
       res.json({
         success: true,
         message: 'Conexão iniciada',
-        status: getConnectionStatus(),
-        syncPeriodDays
+        status: getConnectionStatus()
       });
     }
   } catch (error) {
@@ -213,5 +215,43 @@ export async function checkSession(req, res) {
   } catch (error) {
     logger.error('Erro ao verificar sessão:', error);
     res.status(500).json({ error: 'Erro ao verificar sessão' });
+  }
+}
+
+/**
+ * Salva configurações de sincronização
+ */
+export async function saveSyncSettings(req, res) {
+  try {
+    const { syncHistory, syncPeriodDays } = req.body;
+
+    logger.info('Salvando configurações de sincronização:', { syncHistory, syncPeriodDays });
+
+    await saveSyncSettingsExport(syncHistory, syncPeriodDays);
+
+    res.json({
+      success: true,
+      message: 'Configurações de sincronização salvas com sucesso'
+    });
+  } catch (error) {
+    logger.error('Erro ao salvar configurações de sincronização:', error);
+    res.status(500).json({ error: 'Erro ao salvar configurações de sincronização' });
+  }
+}
+
+/**
+ * Carrega configurações de sincronização
+ */
+export async function loadSyncSettings(req, res) {
+  try {
+    const settings = await loadSyncSettingsExport();
+
+    res.json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    logger.error('Erro ao carregar configurações de sincronização:', error);
+    res.status(500).json({ error: 'Erro ao carregar configurações de sincronização' });
   }
 }

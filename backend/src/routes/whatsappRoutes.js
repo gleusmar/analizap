@@ -6,7 +6,9 @@ import {
   getQR,
   refreshQR,
   removeSessionController,
-  checkSession
+  checkSession,
+  saveSyncSettings,
+  loadSyncSettings
 } from '../controllers/whatsappController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -23,5 +25,7 @@ router.post('/qr/refresh', refreshQR);
 router.use(authenticateToken);
 router.post('/disconnect', disconnect);
 router.delete('/session', removeSessionController);
+router.post('/sync-settings', saveSyncSettings);
+router.get('/sync-settings', loadSyncSettings);
 
 export default router;
