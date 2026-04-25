@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { predefinedMessagesAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import { useTheme } from '../contexts/ThemeContext';
 
 function SettingsPredefinedMessages() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
   const [showModal, setShowModal] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [formData, setFormData] = useState({
@@ -103,22 +105,23 @@ function SettingsPredefinedMessages() {
 
       <div className="space-y-2">
         {messages.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm">
+          <div className="text-center py-8 text-sm" style={{ color: colors.textSecondary }}>
             Nenhuma mensagem pré-definida cadastrada
           </div>
         ) : (
           messages.map((message) => (
             <div
               key={message.id}
-              className="flex items-center justify-between p-3 bg-[#111b21] border border-gray-700 rounded-lg hover:bg-[#202c33] transition-colors"
+              className="flex items-center justify-between p-3 border rounded-lg"
+              style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}
             >
               <div className="flex-1 min-w-0">
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
-                    <span className="font-medium text-white">{message.shortcut}</span>
-                    <span className="text-xs text-gray-400">→</span>
+                    <span className="font-medium" style={{ color: colors.text }}>{message.shortcut}</span>
+                    <span className="text-xs" style={{ color: colors.textSecondary }}>→</span>
                   </div>
-                  <p className="text-sm text-gray-400 break-words whitespace-normal">{message.content}</p>
+                  <p className="text-sm" style={{ color: colors.textSecondary }}>{message.content}</p>
                 </div>
               </div>
               <div className="flex space-x-2 ml-4">
@@ -143,14 +146,14 @@ function SettingsPredefinedMessages() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#111b21] rounded-lg p-6 w-96 border border-gray-700">
-            <h3 className="text-lg font-medium text-white mb-4">
+          <div className="rounded-lg p-5 w-full max-w-md" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+            <h3 className="text-base font-semibold mb-4" style={{ color: colors.text }}>
               {selectedMessage ? 'Editar Mensagem' : 'Nova Mensagem'}
             </h3>
             <form onSubmit={handleSubmit}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label className="block text-sm font-medium" style={{ color: colors.text }}>
                     Atalho
                   </label>
                   <input
@@ -158,20 +161,22 @@ function SettingsPredefinedMessages() {
                     value={formData.shortcut}
                     onChange={(e) => setFormData({ ...formData, shortcut: e.target.value })}
                     placeholder="/ola"
-                    className="w-full border border-gray-600 bg-[#202c33] text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    style={{ backgroundColor: colors.bgTertiary, color: colors.text, borderColor: colors.border }}
                     required
                   />
-                  <p className="text-xs text-gray-400 mt-1">O atalho deve começar com /</p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>O atalho deve começar com /</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                  <label className="block text-sm font-medium" style={{ color: colors.text }}>
                     Conteúdo
                   </label>
                   <textarea
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                     placeholder="Olá! Como posso ajudar?"
-                    className="w-full px-3 py-2 border border-gray-600 bg-[#202c33] text-white rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                    style={{ backgroundColor: colors.bgTertiary, color: colors.text, borderColor: colors.border }}
                     rows={4}
                     required
                   />

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { tagsAPI } from '../services/api';
 import { useToast } from '../components/Toast';
+import { useTheme } from '../contexts/ThemeContext';
 
 function SettingsTags() {
   const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
   const [showModal, setShowModal] = useState(false);
   const [selectedTag, setSelectedTag] = useState(null);
   const [formData, setFormData] = useState({
@@ -102,28 +104,27 @@ function SettingsTags() {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-700">
-              <th className="text-left py-2 px-3 font-medium text-gray-300">Nome</th>
-              <th className="text-left py-2 px-3 font-medium text-gray-300">Cor</th>
-              <th className="text-left py-2 px-3 font-medium text-gray-300">Descrição</th>
-              <th className="text-left py-2 px-3 font-medium text-gray-300">Status</th>
-              <th className="text-left py-2 px-3 font-medium text-gray-300">Ações</th>
+            <tr className="border-b" style={{ borderColor: colors.border }}>
+              <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Nome</th>
+              <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Cor</th>
+              <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Descrição</th>
+              <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Status</th>
             </tr>
           </thead>
           <tbody>
             {tags.map((tag) => (
-              <tr key={tag.id} className="border-b border-gray-700 hover:bg-[#202c33]">
-                <td className="py-2 px-3 font-medium text-white">{tag.name}</td>
+              <tr key={tag.id} className="border-b hover:cursor-pointer transition-colors" style={{ borderColor: colors.border }}>
+                <td className="py-2 px-3 font-medium" style={{ color: colors.text }}>{tag.name}</td>
                 <td className="py-2 px-3">
                   <div className="flex items-center">
                     <div 
                       className="w-6 h-6 rounded mr-2 border border-gray-600"
                       style={{ backgroundColor: tag.color }}
                     ></div>
-                    <span className="text-xs text-gray-400">{tag.color}</span>
+                    <span className="text-xs" style={{ color: colors.textSecondary }}>{tag.color}</span>
                   </div>
                 </td>
-                <td className="py-2 px-3 text-gray-400">{tag.description || '-'}</td>
+                <td className="py-2 px-3" style={{ color: colors.textSecondary }}>{tag.description || '-'}</td>
                 <td className="py-2 px-3">
                   <span className={`px-2 py-0.5 rounded text-xs border ${tag.is_active ? 'bg-emerald-600/30 text-emerald-400 border-emerald-500' : 'bg-red-600/30 text-red-400 border-red-500'}`}>
                     {tag.is_active ? 'Ativo' : 'Inativo'}
@@ -160,23 +161,24 @@ function SettingsTags() {
       {/* Modal de Criar/Editar */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#111b21] rounded-lg p-5 w-full max-w-md border border-gray-700">
-            <h3 className="text-base font-semibold text-white mb-4">
+          <div className="rounded-lg p-5 w-full max-w-md border" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+            <h3 className="text-base font-semibold mb-4" style={{ color: colors.text }}>
               {selectedTag ? 'Editar Tag' : 'Nova Tag'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">Nome *</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: colors.text }}>Nome *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-600 bg-[#202c33] text-white rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  style={{ backgroundColor: colors.bgTertiary, color: colors.text, borderColor: colors.border }}
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">Cor</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: colors.text }}>Cor</label>
                 <div className="flex items-center space-x-2">
                   <input
                     type="color"
