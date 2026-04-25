@@ -416,14 +416,14 @@ export async function uploadFileToSupabase(filePath, fileName, mimeType) {
  */
 export async function saveMessage(messageData) {
   try {
-    const { conversation_id, message_id, from_me, message_type, content, metadata, timestamp } = messageData;
+    const { conversation_id, message_id, from_me, message_type, content, metadata, timestamp, is_read, is_delivered } = messageData;
 
     // Verificar se mensagem já existe
     let existingMessage = null;
     try {
       const { data } = await supabase
         .from('messages')
-        .select('id')
+        .select('*')
         .eq('message_id', message_id)
         .single();
       existingMessage = data;
@@ -434,6 +434,60 @@ export async function saveMessage(messageData) {
     if (existingMessage) {
       return existingMessage;
     }
+
+    // Se message_id não começa com "temp_", verificar se existe mensagem temporária correspondente
+    if (!message_id.startsWith('temp_')) {
+      try {
+        const { data: tempMessage } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversation_id)
+          .eq('from_me', from_me)
+          .eq('message_type', message_type)
+          .like('message_id', 'temp_%')
+          .eq('content', content)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (tempMessage) {
+          logger.info('Atualizando mensagem temporária com message_id real:', {
+            tempMessageId: tempMessage.message_id,
+            realMessageId: message_id
+          });
+
+          // Atualizar a mensagem temporária com o message_id real e outros campos
+          const { data: updatedMessage, error: updateError } = await supabase
+            .from('messages')
+            .update({
+              message_id: message_id,
+              timestamp: new Date(timestamp).toISOString(),
+              is_read: is_read !== undefined ? is_read : tempMessage.is_read,
+              is_delivered: is_delivered !== undefined ? is_delivered : tempMessage.is_delivered
+            })
+            .eq('id', tempMessage.id)
+            .select()
+            .single();
+
+          if (updateError) {
+            logger.error('Erro ao atualizar mensagem temporária:', updateError);
+            throw updateError;
+          }
+
+          // Atualizar last_message_at da conversa
+          await supabase
+            .from('conversations')
+            .update({ last_message_at: new Date(timestamp).toISOString() })
+            .eq('id', conversation_id);
+
+          return updatedMessage;
+        }
+      } catch (e) {
+        // Nenhuma mensagem temporária encontrada, continua com inserção normal
+        logger.debug('Nenhuma mensagem temporária encontrada para atualizar');
+      }
+    }
+
     const { data: message, error } = await supabase
       .from('messages')
       .insert({
@@ -444,8 +498,8 @@ export async function saveMessage(messageData) {
         content,
         metadata,
         timestamp: new Date(timestamp).toISOString(),
-        is_read: false,
-        is_delivered: false
+        is_read: is_read !== undefined ? is_read : false,
+        is_delivered: is_delivered !== undefined ? is_delivered : false
       })
       .select()
       .single();

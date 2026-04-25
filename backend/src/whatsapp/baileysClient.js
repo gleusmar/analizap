@@ -25,6 +25,7 @@ let qrCode = null;
 let sessionId = 'default';
 let io = null;
 let saveCredsFunction = null;
+let authState = null; // Estado de autenticação global
 let syncPeriodDays = 7; // Período de sincronização em dias (padrão: 7)
 let syncHistory = false; // Flag para sincronizar histórico (padrão: false)
 
@@ -342,6 +343,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     const authStateResult = await useMultiFileAuthState(authPath);
 
     const { state, saveCreds } = authStateResult;
+    authState = state; // Armazena o state globalmente
 
     // Wrapper para saveCreds que também salva no banco de dados
     saveCredsFunction = async (creds) => {
@@ -516,7 +518,7 @@ function setupEvents(socket) {
   // Evento de credenciais atualizadas
   socket.ev.on('creds.update', async () => {
     logger.info('Credenciais atualizadas');
-    await saveAuthState();
+    await saveAuthState(authState);
   });
 
   // Evento de atualização de mensagens
@@ -776,10 +778,10 @@ function setupEvents(socket) {
 /**
  * Salva o auth state
  */
-async function saveAuthState() {
+async function saveAuthState(state) {
   try {
-    if (saveCredsFunction) {
-      await saveCredsFunction();
+    if (saveCredsFunction && state) {
+      await saveCredsFunction(state.creds);
       logger.info('Auth state salvo');
     }
   } catch (error) {
