@@ -1,0 +1,64 @@
+import { createContext, useContext, useState, useEffect } from 'react';
+
+const ThemeContext = createContext();
+
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};
+
+export const ThemeProvider = ({ children }) => {
+  const [isDark, setIsDark] = useState(() => {
+    // Carregar do localStorage ou usar dark como padrão
+    const saved = localStorage.getItem('theme');
+    return saved ? saved === 'dark' : true;
+  });
+
+  useEffect(() => {
+    // Salvar no localStorage quando mudar
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    // Adicionar/remover classe dark do body
+    if (isDark) {
+      document.body.classList.add('dark');
+    } else {
+      document.body.classList.remove('dark');
+    }
+  }, [isDark]);
+
+  const toggleTheme = () => {
+    setIsDark(!isDark);
+  };
+
+  const colors = isDark ? {
+    bg: '#111b21',
+    bgSecondary: '#202c33',
+    bgTertiary: '#2a3942',
+    text: '#e9edef',
+    textSecondary: '#8696a0',
+    border: '#2a3942',
+    primary: '#00a884',
+    primaryHover: '#008f6f',
+    danger: '#dc2626',
+    dangerHover: '#b91c1c'
+  } : {
+    bg: '#ffffff',
+    bgSecondary: '#f0f2f5',
+    bgTertiary: '#e4e6eb',
+    text: '#111b21',
+    textSecondary: '#54656f',
+    border: '#e4e6eb',
+    primary: '#00a884',
+    primaryHover: '#008f6f',
+    danger: '#dc2626',
+    dangerHover: '#b91c1c'
+  };
+
+  return (
+    <ThemeContext.Provider value={{ isDark, toggleTheme, colors }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, CheckSquare, Square, Loader2, ArrowUpDown } from 'lucide-react';
+import { X, CheckSquare, Square, Loader2, ArrowUpDown, Sun, Moon } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -9,12 +9,14 @@ import { useWhatsApp } from '../hooks/useWhatsApp';
 import { MessageBubble } from '../components/MessageBubble';
 import ContactPanel from '../components/ContactPanel';
 import EmojiPicker from 'emoji-picker-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 function Chat() {
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const toast = useToast();
+  const { isDark, toggleTheme } = useTheme();
 
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
@@ -1048,6 +1050,15 @@ function Chat() {
         </div>
 
         <div className="flex-1"></div>
+
+        {/* Toggle de tema */}
+        <button
+          onClick={toggleTheme}
+          className="mb-4 p-2 text-gray-400 hover:text-emerald-500 transition-colors"
+          title={isDark ? 'Modo claro' : 'Modo escuro'}
+        >
+          {isDark ? <Sun size={24} /> : <Moon size={24} />}
+        </button>
 
         {/* Configurações */}
         <button

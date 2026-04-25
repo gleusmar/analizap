@@ -10,39 +10,42 @@ import SettingsConnection from './pages/SettingsConnection';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import { ToastProvider } from './components/Toast';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 function App() {
   return (
-    <ToastProvider>
-      <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="users" element={<AdminRoute><SettingsUsers /></AdminRoute>} />
-            <Route path="departments" element={<AdminRoute><SettingsDepartments /></AdminRoute>} />
-            <Route path="tags" element={<SettingsTags />} />
-            <Route path="predefined-messages" element={<SettingsPredefinedMessages />} />
-            <Route path="connection" element={<AdminRoute><SettingsConnection /></AdminRoute>} />
-          </Route>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </Router>
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        <Router future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Chat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="users" element={<AdminRoute><SettingsUsers /></AdminRoute>} />
+              <Route path="departments" element={<AdminRoute><SettingsDepartments /></AdminRoute>} />
+              <Route path="tags" element={<SettingsTags />} />
+              <Route path="predefined-messages" element={<SettingsPredefinedMessages />} />
+              <Route path="connection" element={<AdminRoute><SettingsConnection /></AdminRoute>} />
+            </Route>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 
