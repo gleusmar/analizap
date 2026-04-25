@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { X, CheckSquare, Square } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -15,7 +15,7 @@ function Chat() {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
   const toast = useToast();
-  
+
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
   const [activeTab, setActiveTab] = useState('open');
@@ -48,6 +48,9 @@ function Chat() {
   const [replyingTo, setReplyingTo] = useState(null); // Mensagem sendo respondida
   const [selectedContactsToForward, setSelectedContactsToForward] = useState([]);
   const [forwardSearchQuery, setForwardSearchQuery] = useState('');
+  // Estados para múltipla seleção
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedConversations, setSelectedConversations] = useState(new Set());
 
   // Hooks para dados reais
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
@@ -428,6 +431,42 @@ function Chat() {
         : conv
     );
     setConversationsWithTags(updatedConversations);
+  };
+
+  // Funções para seleção múltipla
+  const toggleMultiSelectMode = () => {
+    setIsMultiSelectMode(!isMultiSelectMode);
+    setSelectedConversations(new Set());
+  };
+
+  const toggleConversationSelection = (conversationId) => {
+    setSelectedConversations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(conversationId)) {
+        newSet.delete(conversationId);
+      } else {
+        newSet.add(conversationId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCloseMultipleConversations = async () => {
+    if (selectedConversations.size === 0) return;
+
+    try {
+      for (const conversationId of selectedConversations) {
+        await conversationsAPI.closeConversation(conversationId);
+      }
+
+      toast.success(`${selectedConversations.size} conversa(s) encerrada(s)`);
+      setSelectedConversations(new Set());
+      setIsMultiSelectMode(false);
+      refreshConversations();
+    } catch (error) {
+      console.error('Erro ao encerrar conversas:', error);
+      toast.error('Erro ao encerrar conversas');
+    }
   };
 
   const handleTogglePin = async () => {
@@ -1042,34 +1081,59 @@ function Chat() {
             <img src="/ico.png" alt="Analizap" className="w-8 h-8 mr-2" />
             <h1 className="text-white text-lg font-semibold">Analizap</h1>
           </div>
-          <div className="relative">
+          <div className="flex space-x-2 mb-3">
             <input
               type="text"
-              placeholder="Pesquisar ou começar nova conversa"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#202c33] text-white placeholder-gray-400 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none"
+              placeholder="Buscar conversas..."
+              value={conversationSearchQuery}
+              onChange={(e) => setConversationSearchQuery(e.target.value)}
+              className="flex-1 bg-[#111b21] text-white placeholder-gray-500 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
             />
-            <svg className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <button
+              onClick={toggleMultiSelectMode}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isMultiSelectMode ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+              title={isMultiSelectMode ? 'Sair do modo de seleção' : 'Seleção múltipla'}
+            >
+              {isMultiSelectMode ? <CheckSquare size={20} /> : <Square size={20} />}
+            </button>
           </div>
-        </div>
-
-        {/* Abas */}
-        <div className="flex bg-[#111b21] border-b border-gray-700">
-          <button
-            onClick={() => setActiveTab('open')}
-            className={`flex-1 py-3 text-sm font-medium ${activeTab === 'open' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-gray-300'}`}
-          >
-            Abertas
-          </button>
-          <button
-            onClick={() => setActiveTab('closed')}
-            className={`flex-1 py-3 text-sm font-medium ${activeTab === 'closed' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-gray-300'}`}
-          >
-            Fechadas
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setActiveTab('open')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'open' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+            >
+              Abertas
+            </button>
+            <button
+              onClick={() => setActiveTab('closed')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'closed' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+            >
+              Fechadas
+            </button>
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'all' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+            >
+              Todas
+            </button>
+          </div>
+          {/* Botão para encerrar múltiplas conversas */}
+          {isMultiSelectMode && selectedConversations.size > 0 && (
+            <button
+              onClick={handleCloseMultipleConversations}
+              className="w-full mt-3 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+            >
+              Encerrar {selectedConversations.size} conversa(s)
+            </button>
+          )}
         </div>
 
         {/* Indicador de busca */}
@@ -1095,11 +1159,20 @@ function Chat() {
             filteredConversations.map(conversation => (
               <div
                 key={conversation.id}
-                onClick={() => handleSelectConversation(conversation)}
+                onClick={() => isMultiSelectMode ? toggleConversationSelection(conversation.id) : handleSelectConversation(conversation)}
                 className={`flex items-center p-3 hover:bg-[#202c33] cursor-pointer transition-colors ${
-                  selectedConversation?.id === conversation.id ? 'bg-[#2a3942]' : ''
-                }`}
+                  selectedConversation?.id === conversation.id && !isMultiSelectMode ? 'bg-[#2a3942]' : ''
+                } ${selectedConversations.has(conversation.id) && isMultiSelectMode ? 'bg-[#2a3942]' : ''}`}
               >
+                {isMultiSelectMode && (
+                  <div className="mr-3">
+                    {selectedConversations.has(conversation.id) ? (
+                      <CheckSquare size={20} className="text-emerald-500" />
+                    ) : (
+                      <Square size={20} className="text-gray-400" />
+                    )}
+                  </div>
+                )}
                 <div className="relative mr-3">
                   <img
                     src={conversation.profile_picture_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${conversation.phone}`}
