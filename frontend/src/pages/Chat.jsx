@@ -58,79 +58,35 @@ function Chat() {
 
   // Integrar com Socket.io para receber mensagens em tempo real
   const handleMessageReceived = useCallback((conversationId, message, isTemp = false) => {
-    // Se for mensagem temporária, adiciona ao estado otimista
-    if (isTemp && conversationId === selectedConversation?.id) {
-      setOptimisticMessages(prev => {
-        const convMessages = prev[conversationId] || [];
-        // Verifica se já existe uma mensagem com o mesmo message_id
-        const existingIndex = convMessages.findIndex(m => m.message_id === message.message_id);
+    // Com a nova abordagem, não precisamos mais de mensagens temporárias
+    // As mensagens são salvas imediatamente com ID temporário e o real_message_id é atualizado em background
+    // Basta adicionar a mensagem ao socketMessages
+    setSocketMessages(prev => {
+      const convMessages = prev[conversationId] || [];
+      // Verifica se já existe uma mensagem com o mesmo message_id
+      const existingIndex = convMessages.findIndex(m => m.message_id === message.message_id);
 
-        if (existingIndex >= 0) {
-          // Substitui a mensagem existente (atualização suave)
-          const updated = [...convMessages];
-          updated[existingIndex] = message;
-          return {
-            ...prev,
-            [conversationId]: updated
-          };
-        } else {
-          // Adiciona nova mensagem
-          return {
-            ...prev,
-            [conversationId]: [...convMessages, message]
-          };
-        }
-      });
-    }
-
-    // Se for mensagem definitiva
-    if (!isTemp && conversationId === selectedConversation?.id) {
-      setOptimisticMessages(prev => {
-        const convMessages = prev[conversationId] || [];
-
-        // Se for mensagem enviada por nós, remove todas as mensagens otimistas da conversa
-        // (já que a otimista tem ID temporário e não vai corresponder ao message_id real)
-        if (message.from_me) {
-          return {
-            ...prev,
-            [conversationId]: []
-          };
-        }
-
-        // Se for mensagem recebida, remove apenas a temporária com o mesmo message_id
+      if (existingIndex >= 0) {
+        // Substitui a mensagem existente (caso o real_message_id tenha sido atualizado)
+        const updated = [...convMessages];
+        updated[existingIndex] = message;
         return {
           ...prev,
-          [conversationId]: convMessages.filter(m => m.message_id !== message.message_id)
+          [conversationId]: updated
         };
-      });
+      } else {
+        // Adiciona nova mensagem
+        return {
+          ...prev,
+          [conversationId]: [...convMessages, message]
+        };
+      }
+    });
 
-      // Adiciona mensagem definitiva ao estado socketMessages para exibição imediata
-      setSocketMessages(prev => {
-        const convMessages = prev[conversationId] || [];
-        const existingIndex = convMessages.findIndex(m => m.message_id === message.message_id);
-
-        if (existingIndex >= 0) {
-          // Substitui mensagem existente
-          const updated = [...convMessages];
-          updated[existingIndex] = message;
-          return {
-            ...prev,
-            [conversationId]: updated
-          };
-        } else {
-          // Adiciona nova mensagem
-          return {
-            ...prev,
-            [conversationId]: [...convMessages, message]
-          };
-        }
-      });
-
-      // Invalida cache para a próxima atualização (não recarrega imediatamente)
-      const cacheKey = `messages_${conversationId}`;
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(`${cacheKey}_time`);
-    }
+    // Invalida cache para a próxima atualização
+    const cacheKey = `messages_${conversationId}`;
+    localStorage.removeItem(cacheKey);
+    localStorage.removeItem(`${cacheKey}_time`);
 
     // Invalidar cache da lista de conversas
     localStorage.removeItem('conversations_list');
@@ -138,7 +94,7 @@ function Chat() {
 
     // Sempre atualiza a lista de conversas do servidor
     refreshConversations();
-  }, [selectedConversation, refreshConversations]);
+  }, [selectedConversation?.id, refreshConversations]);
 
   // Callback para atualização de status de mensagem
   const handleMessageStatusUpdate = useCallback((messageId, status) => {
