@@ -184,13 +184,13 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
         jid = mappedJid;
         phone = extractPhoneFromJid(jid);
       } else {
-        logger.warn('LID não mapeado, não é possível extrair phone', { lid: jid });
-        // Se não tiver mapeamento, não cria conversa
-        return null;
+        // Se não tiver mapeamento, usa o LID como phone (com @lid para diferenciar)
+        logger.warn('LID não mapeado, usando LID como phone', { lid: jid });
+        phone = jid; // Usa o LID completo como identificador
       }
     }
 
-    // Se ainda não tiver phone (ex: jid era LID e não foi mapeado)
+    // Se ainda não tiver phone (ex: jid era null)
     if (!phone) {
       logger.error('Não foi possível extrair phone do JID', { jid });
       return null;
@@ -225,15 +225,24 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
         }
       }
 
-      // Atualiza contact_name se tiver um novo nome
-      if (contactName && contactName !== existingConversation.contact_name) {
+      // Atualiza o nome se um novo pushName foi fornecido e for diferente do atual
+      // Prioridade: contactName (pushName) > nome atual
+      if (contactName && contactName !== existingConversation.contact_name && contactName !== phone) {
+        logger.debug('Atualizando nome da conversa', {
+          conversationId: existingConversation.id,
+          oldName: existingConversation.contact_name,
+          newName: contactName
+        });
+
         const { error: nameUpdateError } = await supabase
           .from('conversations')
           .update({ contact_name: contactName })
           .eq('id', existingConversation.id);
 
-        if (!nameUpdateError) {
-          existingConversation.contact_name = contactName;
+        if (nameUpdateError) {
+          logger.error('Erro ao atualizar nome da conversa:', nameUpdateError);
+        } else {
+          existingConversation.contact_name = contactName; // Atualiza localmente para retorno
         }
       }
 
@@ -406,7 +415,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     // Define o período de sincronização globalmente
     setSyncPeriodDays(syncPeriodDaysParam);
 
-    const { key, message: msg, pushName, messageTimestamp, notifyName } = message;
+    const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
     const fromMe = key.fromMe;
 
@@ -491,12 +500,11 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     const phone = extractPhoneFromJid(primaryIdentifier);
 
     // Obtém ou cria conversa
-    // Prioridade: notifyName (nome do avatar) > pushName > phone
-    const contactName = notifyName || pushName || null;
+    // Prioridade: pushName (nome definido pelo usuário no WhatsApp) > phone
+    const contactName = pushName || null;
 
     logger.debug('Nomes disponíveis para conversa', {
       phone,
-      notifyName,
       pushName,
       contactName
     });
