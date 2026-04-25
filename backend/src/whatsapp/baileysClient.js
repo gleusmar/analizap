@@ -731,7 +731,7 @@ async function handleIncomingMessage(message) {
         await supabase
           .from('conversations')
           .update({
-            last_message_at: new Date().toISOString()
+            last_message_at: new Date(messageTimestamp * 1000).toISOString()
           })
           .eq('id', conversation.id);
       }

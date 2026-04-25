@@ -97,20 +97,25 @@ export function useConversationMessages(conversationId) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const CACHE_SIZE = 20; // Cache de 20 mensagens
 
-  const fetchMessages = useCallback(async () => {
-    console.log('fetchMessages chamada', { conversationId });
+  const fetchMessages = useCallback(async (currentOffset = 0, append = false) => {
+    console.log('fetchMessages chamada', { conversationId, currentOffset, append });
 
     if (!conversationId) {
       console.warn('fetchMessages: conversationId é null, retornando');
       return;
     }
 
-    setLoading(true);
+    if (!append) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      // Tenta buscar do cache primeiro
+      // Tenta buscar do cache primeiro (apenas para a primeira carga)
       const cacheKey = `messages_${conversationId}`;
       const cachedData = localStorage.getItem(cacheKey);
       const cacheTime = localStorage.getItem(`${cacheKey}_time`);
@@ -118,18 +123,24 @@ export function useConversationMessages(conversationId) {
 
       console.log('fetchMessages: cache check', { hasCache: !!cachedData, hasCacheTime: !!cacheTime });
 
-      // Se tem cache válido, usa primeiro
-      if (cachedData && cacheTime) {
+      // Se tem cache válido e não é append, usa primeiro
+      if (cachedData && cacheTime && !append) {
         const cacheAge = Date.now() - parseInt(cacheTime);
         if (cacheAge < CACHE_DURATION) {
           console.log('fetchMessages: usando cache', { cacheAge });
-          setMessages(JSON.parse(cachedData));
+          const cachedMessages = JSON.parse(cachedData);
+          setMessages(cachedMessages);
+          setOffset(cachedMessages.length);
+          setHasMore(cachedMessages.length >= 50); // Se tem 50, pode ter mais
           setLoading(false);
           // Busca em background para atualizar
-          conversationsAPI.getMessages(conversationId).then(response => {
+          conversationsAPI.getMessages(conversationId, CACHE_SIZE, 0).then(response => {
             console.log('fetchMessages: atualização em background', { messageCount: response.data.messages?.length });
-            setMessages(response.data.messages || []);
-            localStorage.setItem(cacheKey, JSON.stringify(response.data.messages || []));
+            const newMessages = response.data.messages || [];
+            setMessages(newMessages);
+            setOffset(newMessages.length);
+            setHasMore(newMessages.length >= CACHE_SIZE);
+            localStorage.setItem(cacheKey, JSON.stringify(newMessages));
             localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
           }).catch(err => {
             console.error('fetchMessages: erro na atualização em background', err);
@@ -138,26 +149,44 @@ export function useConversationMessages(conversationId) {
         }
       }
 
-      // Se não tem cache ou expirou, busca do servidor
-      console.log('fetchMessages: buscando do servidor');
-      const response = await conversationsAPI.getMessages(conversationId);
+      // Se não tem cache ou expirou, ou é append, busca do servidor
+      console.log('fetchMessages: buscando do servidor', { currentOffset, limit: CACHE_SIZE });
+      const response = await conversationsAPI.getMessages(conversationId, CACHE_SIZE, currentOffset);
       console.log('fetchMessages: resposta do servidor', { messageCount: response.data.messages?.length });
-      setMessages(response.data.messages || []);
-      localStorage.setItem(cacheKey, JSON.stringify(response.data.messages || []));
-      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      const newMessages = response.data.messages || [];
+
+      if (append) {
+        setMessages(prev => [...prev, ...newMessages]);
+      } else {
+        setMessages(newMessages);
+        localStorage.setItem(cacheKey, JSON.stringify(newMessages));
+        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      }
+
+      setOffset(currentOffset + newMessages.length);
+      setHasMore(newMessages.length >= CACHE_SIZE);
     } catch (err) {
       setError('Erro ao carregar mensagens');
       console.error('Erro ao carregar mensagens:', err);
     } finally {
       setLoading(false);
     }
-  }, [conversationId]);
+  }, [conversationId, CACHE_SIZE]);
+
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      console.log('loadMore chamado', { offset });
+      fetchMessages(offset, true);
+    }
+  }, [loading, hasMore, offset, fetchMessages]);
 
   useEffect(() => {
     // Limpa mensagens imediatamente quando conversationId muda
     setMessages([]);
-    fetchMessages();
-  }, [fetchMessages]);
+    setOffset(0);
+    setHasMore(true);
+    fetchMessages(0, false);
+  }, [conversationId, fetchMessages]);
 
   const refresh = useCallback(async () => {
     if (!conversationId) return;
@@ -169,19 +198,11 @@ export function useConversationMessages(conversationId) {
 
     setLoading(true);
     setError(null);
+    setOffset(0);
+    setHasMore(true);
 
-    try {
-      const response = await conversationsAPI.getMessages(conversationId);
-      setMessages(response.data.messages || []);
-      localStorage.setItem(cacheKey, JSON.stringify(response.data.messages || []));
-      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-    } catch (err) {
-      setError('Erro ao carregar mensagens');
-      console.error('Erro ao carregar mensagens:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId]);
+    await fetchMessages(0, false);
+  }, [conversationId, fetchMessages]);
 
-  return { messages, loading, error, refresh };
+  return { messages, loading, error, refresh, hasMore, loadMore };
 }

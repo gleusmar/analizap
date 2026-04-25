@@ -462,6 +462,18 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
 
+      logger.debug('Verificando período de sincronização em processWhatsAppMessage', {
+        messageDate: messageDate.toISOString(),
+        cutoffDate: cutoffDate.toISOString(),
+        syncPeriodDays,
+        isOld: messageDate < cutoffDate,
+        messageType: msg.imageMessage ? 'image' :
+                    msg.audioMessage ? 'audio' :
+                    msg.videoMessage ? 'video' :
+                    msg.documentMessage ? 'document' :
+                    msg.conversation ? 'text' : 'unknown'
+      });
+
       if (messageDate < cutoffDate) {
         logger.debug(`Mensagem antiga (${messageDate.toISOString()}), ignorando (período: ${syncPeriodDays} dias)`);
         return null;
