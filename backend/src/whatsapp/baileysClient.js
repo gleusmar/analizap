@@ -515,6 +515,11 @@ async function processMessageBatch() {
   const batchToProcess = [...messageBatch];
   messageBatch.length = 0; // Limpar o batch
 
+  logger.debug('processMessageBatch chamado', {
+    batchSize: batchToProcess.length,
+    syncPeriodDays
+  });
+
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -563,6 +568,12 @@ async function processMessageBatch() {
 
       // Processar mensagem (processWhatsAppMessage vai criar a conversa se necessário)
       const { processWhatsAppMessage } = await import('../services/messageService.js');
+
+      logger.debug('Chamando processWhatsAppMessage no batch', {
+        messageId,
+        syncPeriodDays
+      });
+
       const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
       // Se a mensagem não foi processada (null), continua para a próxima
