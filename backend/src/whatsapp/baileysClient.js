@@ -55,6 +55,12 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
   sessionId = sessionIdParam;
   syncPeriodDays = syncPeriodDaysParam; // Define o período de sincronização
 
+  logger.info('createWhatsAppSocket chamado', {
+    sessionId,
+    syncPeriodDaysParam,
+    syncPeriodDays
+  });
+
   try {
     logger.info(`Criando socket WhatsApp para sessão: ${sessionId}, período de sincronização: ${syncPeriodDays} dias`);
 
@@ -292,6 +298,9 @@ function setupEvents(socket) {
 
           // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
           const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
+
+          logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
+
           const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
           logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });

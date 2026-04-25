@@ -52,13 +52,13 @@ CREATE INDEX IF NOT EXISTS idx_messages_is_read ON messages(is_read);
 CREATE OR REPLACE FUNCTION update_conversation_on_message()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Atualizar last_message_at da conversa
+    -- Atualizar last_message_at da conversa com a mensagem mais recente (GREATEST garante isso)
     UPDATE conversations
-    SET last_message_at = NEW.timestamp,
+    SET last_message_at = GREATEST(COALESCE(last_message_at, NEW.timestamp), NEW.timestamp),
         unread_count = CASE WHEN NEW.from_me = false THEN unread_count + 1 ELSE unread_count END,
         updated_at = NOW()
     WHERE id = NEW.conversation_id;
-    
+
     RETURN NEW;
 END;
 $$ language 'plpgsql';

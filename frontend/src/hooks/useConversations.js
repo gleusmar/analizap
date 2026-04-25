@@ -154,6 +154,8 @@ export function useConversationMessages(conversationId) {
   }, [conversationId]);
 
   useEffect(() => {
+    // Limpa mensagens imediatamente quando conversationId muda
+    setMessages([]);
     fetchMessages();
   }, [fetchMessages]);
 

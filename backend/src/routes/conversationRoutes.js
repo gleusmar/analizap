@@ -31,7 +31,7 @@ router.get('/conversations/:conversationId/messages', getMessages);
 router.post('/conversations/:conversationId/send', sendMessage);
 
 // Marcar mensagens como lidas
-router.post('/conversations/:conversationId/mark-read', markAsRead);
+router.post('/conversations/:conversationId/read', markAsRead);
 
 // Fechar conversa
 router.post('/conversations/:conversationId/close', closeConversationRoute);
