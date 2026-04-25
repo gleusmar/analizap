@@ -33,8 +33,9 @@ const BASE_DELAY = 3000; // 3 segundos
 
 // Sistema de batching para mensagens do histórico
 const messageBatch = [];
-const BATCH_SIZE = 50; // Salvar a cada 50 mensagens
-const BATCH_DELAY = 1000; // Ou a cada 1 segundo
+const BATCH_SIZE = 20; // Salvar a cada 20 mensagens (reduzido para diminuir carga)
+const BATCH_DELAY = 2000; // Ou a cada 2 segundos (aumentado para dar tempo ao Supabase)
+const MESSAGE_PROCESSING_DELAY = 100; // Delay entre processamento de cada mensagem (ms)
 let batchTimeout = null;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -539,6 +540,7 @@ async function processMessageBatch() {
     }
 
     // Processar cada mensagem individualmente (deixar processWhatsAppMessage criar a conversa)
+    let processedCount = 0;
     for (const msg of batchToProcess) {
       const message = msg.message;
       const remoteJid = message.key.remoteJid;
@@ -566,6 +568,8 @@ async function processMessageBatch() {
       // Se a mensagem não foi processada (null), continua para a próxima
       if (!processedMessage) continue;
 
+      processedCount++;
+
       // Emitir evento apenas para mensagens recentes (últimas 5 minutos)
       const messageTime = message.messageTimestamp * 1000;
       const isRecent = Date.now() - messageTime < 5 * 60 * 1000;
@@ -576,7 +580,17 @@ async function processMessageBatch() {
           message: processedMessage
         });
       }
+
+      // Delay entre mensagens para não sobrecarregar o Supabase
+      if (processedCount < batchToProcess.length) {
+        await new Promise(resolve => setTimeout(resolve, MESSAGE_PROCESSING_DELAY));
+      }
     }
+
+    logger.debug(`Batch processado: ${processedCount}/${batchToProcess.length} mensagens salvas`);
+
+    // Delay adicional após processar batch para dar tempo ao Supabase
+    await new Promise(resolve => setTimeout(resolve, 500));
   } catch (error) {
     logger.error('Erro ao processar batch de mensagens:', error.message || error);
   }
