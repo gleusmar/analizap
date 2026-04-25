@@ -133,10 +133,16 @@ export const MESSAGE_TYPES = {
 };
 
 /**
- * Extrai o número de telefone do JID do WhatsApp
+ * Extrai o número de telefone do JID
  * JID format: 5511999999999@s.whatsapp.net
+ * LID format: user@lid (retorna null para LIDs)
  */
 export function extractPhoneFromJid(jid) {
+  if (!jid) return null;
+  if (jid.endsWith('@lid')) {
+    logger.warn('Tentando extrair phone de LID, retornando null', { jid });
+    return null;
+  }
   return jid.split('@')[0];
 }
 
@@ -160,6 +166,8 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
   let phone = extractPhoneFromJid(jid);
 
   logger.debug('getOrCreateConversation chamada', {
+    jid,
+    lid,
     phone,
     contactName,
     messageTimestamp,
@@ -172,9 +180,20 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       const mappedJid = await getJidFromLid(jid);
       if (mappedJid) {
         // Usa o JID mapeado em vez do LID
+        logger.debug('LID mapeado para JID', { lid: jid, mappedJid });
         jid = mappedJid;
         phone = extractPhoneFromJid(jid);
+      } else {
+        logger.warn('LID não mapeado, não é possível extrair phone', { lid: jid });
+        // Se não tiver mapeamento, não cria conversa
+        return null;
       }
+    }
+
+    // Se ainda não tiver phone (ex: jid era LID e não foi mapeado)
+    if (!phone) {
+      logger.error('Não foi possível extrair phone do JID', { jid });
+      return null;
     }
 
     // Tenta encontrar conversa existente pelo phone

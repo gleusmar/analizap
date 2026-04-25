@@ -99,7 +99,12 @@ export function useConversationMessages(conversationId) {
   const [error, setError] = useState(null);
 
   const fetchMessages = useCallback(async () => {
-    if (!conversationId) return;
+    console.log('fetchMessages chamada', { conversationId });
+
+    if (!conversationId) {
+      console.warn('fetchMessages: conversationId é null, retornando');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -111,24 +116,32 @@ export function useConversationMessages(conversationId) {
       const cacheTime = localStorage.getItem(`${cacheKey}_time`);
       const CACHE_DURATION = 30 * 1000; // 30 segundos
 
+      console.log('fetchMessages: cache check', { hasCache: !!cachedData, hasCacheTime: !!cacheTime });
+
       // Se tem cache válido, usa primeiro
       if (cachedData && cacheTime) {
         const cacheAge = Date.now() - parseInt(cacheTime);
         if (cacheAge < CACHE_DURATION) {
+          console.log('fetchMessages: usando cache', { cacheAge });
           setMessages(JSON.parse(cachedData));
           setLoading(false);
           // Busca em background para atualizar
           conversationsAPI.getMessages(conversationId).then(response => {
+            console.log('fetchMessages: atualização em background', { messageCount: response.data.messages?.length });
             setMessages(response.data.messages || []);
             localStorage.setItem(cacheKey, JSON.stringify(response.data.messages || []));
             localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-          }).catch(() => {});
+          }).catch(err => {
+            console.error('fetchMessages: erro na atualização em background', err);
+          });
           return;
         }
       }
 
       // Se não tem cache ou expirou, busca do servidor
+      console.log('fetchMessages: buscando do servidor');
       const response = await conversationsAPI.getMessages(conversationId);
+      console.log('fetchMessages: resposta do servidor', { messageCount: response.data.messages?.length });
       setMessages(response.data.messages || []);
       localStorage.setItem(cacheKey, JSON.stringify(response.data.messages || []));
       localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
