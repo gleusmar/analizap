@@ -93,7 +93,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
       logger: loggerBaileys,
       browser: ['Ubuntu', 'Chrome', '20.0.04'],
       markOnlineOnConnect: false,
-      syncFullHistory: true,
+      syncFullHistory: syncPeriodDays > 0, // Desabilita syncFullHistory se syncPeriodDays for 0
       generateHighQualityLinkPreview: true,
       getMessage: async (key) => {
         // Implementar busca de mensagem no banco de dados

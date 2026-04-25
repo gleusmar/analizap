@@ -149,6 +149,7 @@ function SettingsConnection() {
               onChange={(e) => setSyncPeriodDays(parseInt(e.target.value))}
               className="w-full bg-[#202c33] text-white border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
+              <option value={0}>Não sincronizar histórico</option>
               <option value={1}>1 dia</option>
               <option value={3}>3 dias</option>
               <option value={7}>7 dias (recomendado)</option>
@@ -156,7 +157,9 @@ function SettingsConnection() {
               <option value={30}>30 dias</option>
             </select>
             <p className="text-xs text-gray-500 mt-1">
-              Mensagens mais antigas que este período não serão importadas
+              {syncPeriodDays === 0
+                ? 'Nenhuma mensagem antiga será importada, apenas novas mensagens'
+                : 'Mensagens mais antigas que este período não serão importadas'}
             </p>
           </div>
         )}
