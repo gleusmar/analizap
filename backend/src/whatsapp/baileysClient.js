@@ -33,9 +33,9 @@ const BASE_DELAY = 3000; // 3 segundos
 
 // Sistema de batching para mensagens do histórico
 const messageBatch = [];
-const BATCH_SIZE = 20; // Salvar a cada 20 mensagens (reduzido para diminuir carga)
-const BATCH_DELAY = 2000; // Ou a cada 2 segundos (aumentado para dar tempo ao Supabase)
-const MESSAGE_PROCESSING_DELAY = 100; // Delay entre processamento de cada mensagem (ms)
+const BATCH_SIZE = 10; // Salvar a cada 10 mensagens (reduzido ainda mais)
+const BATCH_DELAY = 3000; // Ou a cada 3 segundos (aumentado ainda mais)
+const MESSAGE_PROCESSING_DELAY = 200; // Delay entre processamento de cada mensagem (ms)
 let batchTimeout = null;
 
 const __filename = fileURLToPath(import.meta.url);

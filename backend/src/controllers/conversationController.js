@@ -4,6 +4,7 @@ import {
   getAllConversations,
   getConversationMessages,
   markMessagesAsRead,
+  markMultipleConversationsAsRead,
   closeConversation,
   openConversation,
   getOrCreateConversation,
@@ -89,6 +90,29 @@ export async function markAsRead(req, res) {
   } catch (error) {
     logger.error('Erro ao marcar mensagens como lidas:', error);
     res.status(500).json({ error: 'Erro ao marcar mensagens como lidas' });
+  }
+}
+
+/**
+ * Marca múltiplas conversas como lidas
+ */
+export async function markMultipleAsRead(req, res) {
+  try {
+    const { conversationIds } = req.body;
+
+    if (!conversationIds || !Array.isArray(conversationIds)) {
+      return res.status(400).json({ error: 'conversationIds deve ser um array' });
+    }
+
+    await markMultipleConversationsAsRead(conversationIds);
+
+    res.json({
+      success: true,
+      message: `${conversationIds.length} conversas marcadas como lidas`
+    });
+  } catch (error) {
+    logger.error('Erro ao marcar múltiplas conversas como lidas:', error);
+    res.status(500).json({ error: 'Erro ao marcar múltiplas conversas como lidas' });
   }
 }
 

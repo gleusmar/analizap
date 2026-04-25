@@ -113,25 +113,27 @@ export const conversationsAPI = {
   getMessages: (conversationId, limit = 50, offset = 0) =>
     api.get(`/conversations/${conversationId}/messages`, { params: { limit, offset } }),
   markAsRead: (conversationId) => api.post(`/conversations/${conversationId}/read`),
+  markMultipleAsRead: (conversationIds) => api.post('/conversations/mark-multiple-read', { conversationIds }),
   close: (conversationId) => api.post(`/conversations/${conversationId}/close`),
   open: (conversationId) => api.post(`/conversations/${conversationId}/open`),
   updateContactName: (conversationId, contactName) =>
     api.put(`/conversations/${conversationId}/contact-name`, { contactName }),
   sendMessage: (conversationId, content, messageType = 'text', metadata = {}) =>
-    api.post(`/conversations/${conversationId}/send`, { content, message_type: messageType, metadata }),
-  updateTags: (conversationId, tagIds) =>
-    api.put(`/conversations/${conversationId}/tags`, { tagIds }),
-  delete: (conversationId) => api.delete(`/conversations/${conversationId}`),
-  sendAttachment: (conversationId, formData) =>
-    api.post(`/conversations/${conversationId}/attachment`, formData, {
+    api.post(`/conversations/${conversationId}/send`, { content, messageType, metadata }),
+  sendAttachment: (conversationId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/conversations/${conversationId}/attachment`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    });
+  },
+  sendLocation: (conversationId, latitude, longitude) =>
+    api.post(`/conversations/${conversationId}/location`, { latitude, longitude }),
   sendReaction: (conversationId, messageId, reaction) =>
     api.post(`/conversations/${conversationId}/reaction`, { messageId, reaction }),
-  forwardMessage: (conversationId, messageIds, targetConversationIds) =>
-    api.post(`/conversations/${conversationId}/forward`, { messageIds, targetConversationIds }),
-  sendLocation: (conversationId, location) =>
-    api.post(`/conversations/${conversationId}/location`, location),
+  forwardMessage: (conversationId, messageId, targetConversationId) =>
+    api.post(`/conversations/${conversationId}/forward`, { messageId, targetConversationId }),
+  delete: (conversationId) => api.delete(`/conversations/${conversationId}`),
 };
 
 export default api;

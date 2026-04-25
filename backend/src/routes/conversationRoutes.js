@@ -4,6 +4,7 @@ import {
   getConversations,
   getMessages,
   markAsRead,
+  markMultipleAsRead,
   closeConversationRoute,
   openConversationRoute,
   updateContactNameRoute,
@@ -32,6 +33,9 @@ router.post('/conversations/:conversationId/send', sendMessage);
 
 // Marcar mensagens como lidas
 router.post('/conversations/:conversationId/read', markAsRead);
+
+// Marcar múltiplas conversas como lidas
+router.post('/conversations/mark-multiple-read', markMultipleAsRead);
 
 // Fechar conversa
 router.post('/conversations/:conversationId/close', closeConversationRoute);

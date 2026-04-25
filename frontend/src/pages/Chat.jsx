@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, CheckSquare, Square, Loader2 } from 'lucide-react';
+import { X, CheckSquare, Square, Loader2, ArrowUpDown } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../services/api';
 import { useToast } from '../components/Toast';
@@ -53,6 +53,8 @@ function Chat() {
   const [selectedConversations, setSelectedConversations] = useState(new Set());
   // Estado de loading ao selecionar conversa
   const [loadingConversation, setLoadingConversation] = useState(false);
+  // Estado para ordenação
+  const [sortOrder, setSortOrder] = useState('desc'); // 'asc' ou 'desc'
 
   // Hooks para dados reais
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
@@ -373,14 +375,23 @@ function Chat() {
       console.error('Erro ao abrir conversa:', error);
     }
 
-    // Marcar mensagens como lidas
+    // Marcar mensagens como lidas instantaneamente (remove bubble antes da confirmação)
     if (selected.unread_count > 0) {
-      try {
-        await conversationsAPI.markAsRead(selected.id);
-        refreshConversations();
-      } catch (error) {
-        console.error('Erro ao marcar mensagens como lidas:', error);
-      }
+      // Atualiza localmente para remover o bubble imediatamente
+      setConversations(prev => prev.map(conv =>
+        conv.id === selected.id ? { ...conv, unread_count: 0 } : conv
+      ));
+
+      // Envia confirmação em background
+      conversationsAPI.markAsRead(selected.id)
+        .then(() => {
+          console.log('Conversa marcada como lida no servidor');
+        })
+        .catch(error => {
+          console.error('Erro ao marcar mensagens como lidas:', error);
+          // Se falhar, recarrega para restaurar o estado correto
+          refreshConversations();
+        });
     }
   };
 
@@ -429,10 +440,7 @@ function Chat() {
     if (selectedConversations.size === 0) return;
 
     try {
-      for (const conversationId of selectedConversations) {
-        await conversationsAPI.close(conversationId);
-      }
-
+      await conversationsAPI.closeMultiple(selectedConversations.size); // TODO: implementar endpoint
       toast.success(`${selectedConversations.size} conversa(s) encerrada(s)`);
       setSelectedConversations(new Set());
       setIsMultiSelectMode(false);
@@ -440,6 +448,27 @@ function Chat() {
     } catch (error) {
       console.error('Erro ao encerrar conversas:', error);
       toast.error('Erro ao encerrar conversas');
+    }
+  };
+
+  const handleMarkMultipleAsRead = async () => {
+    if (selectedConversations.size === 0) return;
+
+    try {
+      // Atualiza localmente para remover os bubbles imediatamente
+      setConversations(prev => prev.map(conv =>
+        selectedConversations.has(conv.id) ? { ...conv, unread_count: 0 } : conv
+      ));
+
+      // Envia confirmação em background
+      await conversationsAPI.markMultipleAsRead(Array.from(selectedConversations));
+      toast.success(`${selectedConversations.size} conversa(s) marcada(s) como lidas`);
+      setSelectedConversations(new Set());
+      setIsMultiSelectMode(false);
+    } catch (error) {
+      console.error('Erro ao marcar conversas como lidas:', error);
+      toast.error('Erro ao marcar conversas como lidas');
+      refreshConversations();
     }
   };
 
@@ -486,17 +515,22 @@ function Chat() {
         return true;
       })
       .sort((a, b) => {
-        // Fixadas primeiro, ordenadas por data de fixação (mais antiga por cima)
-        if (a.is_pinned && b.is_pinned) {
-          return new Date(a.pinned_at) - new Date(b.pinned_at);
-        }
-        if (a.is_pinned) return -1;
-        if (b.is_pinned) return 1;
+        // Fixadas sempre no topo
+        if (a.is_pinned && !b.is_pinned) return -1;
+        if (!a.is_pinned && b.is_pinned) return 1;
 
-        // Não fixadas ordenadas por última mensagem (mais recente por cima)
-        return new Date(b.last_message_at) - new Date(a.last_message_at);
+        // Ordenar por última mensagem baseado no sortOrder
+        if (!a.last_message_at) return sortOrder === 'desc' ? 1 : -1;
+        if (!b.last_message_at) return sortOrder === 'desc' ? -1 : 1;
+
+        const aDate = new Date(a.last_message_at);
+        const bDate = new Date(b.last_message_at);
+
+        return sortOrder === 'desc'
+          ? bDate - aDate // Mais recente primeiro
+          : aDate - bDate; // Mais antiga primeiro
       });
-  }, [activeTab, searchQuery, conversationsWithTags, conversations]);
+  }, [conversations, conversationsWithTags, activeTab, searchQuery, sortOrder]);
 
   // Combinar mensagens otimistas, socketMessages e mensagens do backend
   const allMessages = useMemo(() => {
@@ -1058,22 +1092,13 @@ function Chat() {
           <div className="flex space-x-2 mb-3">
             <input
               type="text"
-              placeholder="Buscar conversas..."
-              value={conversationSearchQuery}
-              onChange={(e) => setConversationSearchQuery(e.target.value)}
-              className="flex-1 bg-[#111b21] text-white placeholder-gray-500 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+              placeholder="Buscar conversa..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-[#2a3942] text-white placeholder-gray-500 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
-            <button
-              onClick={toggleMultiSelectMode}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isMultiSelectMode ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
-              }`}
-              title={isMultiSelectMode ? 'Sair do modo de seleção' : 'Seleção múltipla'}
-            >
-              {isMultiSelectMode ? <CheckSquare size={20} /> : <Square size={20} />}
-            </button>
           </div>
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 mb-3">
             <button
               onClick={() => setActiveTab('open')}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -1099,14 +1124,42 @@ function Chat() {
               Todas
             </button>
           </div>
+          <div className="flex space-x-2 mb-3">
+            <button
+              onClick={toggleMultiSelectMode}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isMultiSelectMode ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+              title={isMultiSelectMode ? 'Sair do modo de seleção' : 'Seleção múltipla'}
+            >
+              {isMultiSelectMode ? <CheckSquare size={20} /> : <Square size={20} />}
+            </button>
+            <button
+              onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                sortOrder === 'desc' ? 'bg-emerald-600 text-white' : 'bg-[#111b21] text-gray-400 hover:text-white'
+              }`}
+              title={`Ordenar: ${sortOrder === 'desc' ? 'Mais recente primeiro' : 'Mais antiga primeiro'}`}
+            >
+              <ArrowUpDown size={20} />
+            </button>
+          </div>
           {/* Botão para encerrar múltiplas conversas */}
           {isMultiSelectMode && selectedConversations.size > 0 && (
-            <button
-              onClick={handleCloseMultipleConversations}
-              className="w-full mt-3 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-            >
-              Encerrar {selectedConversations.size} conversa(s)
-            </button>
+            <div className="flex space-x-2 mt-3">
+              <button
+                onClick={handleMarkMultipleAsRead}
+                className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+              >
+                Marcar como lidas
+              </button>
+              <button
+                onClick={handleCloseMultipleConversations}
+                className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
+              >
+                Encerrar
+              </button>
+            </div>
           )}
         </div>
 

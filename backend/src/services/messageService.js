@@ -886,6 +886,45 @@ export async function markMessagesAsRead(conversationId) {
 }
 
 /**
+ * Marca múltiplas conversas como lidas
+ */
+export async function markMultipleConversationsAsRead(conversationIds) {
+  try {
+    if (!conversationIds || conversationIds.length === 0) {
+      return;
+    }
+
+    // Marcar todas as mensagens como lidas
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .in('conversation_id', conversationIds)
+      .eq('is_read', false);
+
+    if (error) {
+      logger.error('Erro ao marcar múltiplas conversas como lidas:', error);
+      throw error;
+    }
+
+    // Zerar contador de não lidas de todas as conversas
+    const { error: updateError } = await supabase
+      .from('conversations')
+      .update({ unread_count: 0 })
+      .in('id', conversationIds);
+
+    if (updateError) {
+      logger.error('Erro ao zerar contador de não lidas de múltiplas conversas:', updateError);
+      throw updateError;
+    }
+
+    logger.info(`Marcadas ${conversationIds.length} conversas como lidas`);
+  } catch (error) {
+    logger.error('Erro ao marcar múltiplas conversas como lidas:', error);
+    throw error;
+  }
+}
+
+/**
  * Fecha uma conversa
  */
 export async function closeConversation(conversationId) {

@@ -119,7 +119,7 @@ export function useConversationMessages(conversationId) {
       const cacheKey = `messages_${conversationId}`;
       const cachedData = localStorage.getItem(cacheKey);
       const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-      const CACHE_DURATION = 30 * 1000; // 30 segundos
+      const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
       console.log('fetchMessages: cache check', { hasCache: !!cachedData, hasCacheTime: !!cacheTime });
 
@@ -133,18 +133,6 @@ export function useConversationMessages(conversationId) {
           setOffset(cachedMessages.length);
           setHasMore(cachedMessages.length >= 50); // Se tem 50, pode ter mais
           setLoading(false);
-          // Busca em background para atualizar
-          conversationsAPI.getMessages(conversationId, CACHE_SIZE, 0).then(response => {
-            console.log('fetchMessages: atualização em background', { messageCount: response.data.messages?.length });
-            const newMessages = response.data.messages || [];
-            setMessages(newMessages);
-            setOffset(newMessages.length);
-            setHasMore(newMessages.length >= CACHE_SIZE);
-            localStorage.setItem(cacheKey, JSON.stringify(newMessages));
-            localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-          }).catch(err => {
-            console.error('fetchMessages: erro na atualização em background', err);
-          });
           return;
         }
       }
