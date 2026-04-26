@@ -818,6 +818,12 @@ function setupEvents(socket) {
 
   // Evento de atualização de presença
   socket.ev.on('presence.update', async (updates) => {
+    // Verificar se updates é iterável
+    if (!updates || !Array.isArray(updates)) {
+      logger.warn('presence.update recebido com formato inválido:', typeof updates);
+      return;
+    }
+
     for (const { id, presences } of updates) {
       const phone = id.split('@')[0]; // Extrair phone do JID
 

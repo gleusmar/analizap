@@ -584,6 +584,12 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       return null;
     }
 
+    // Ignorar mensagens de protocolo (confirmações, atualizações de status, etc.)
+    if (msg.protocolMessage) {
+      logger.debug('Mensagem de protocolo ignorada');
+      return null;
+    }
+
     // Verificar se a mensagem tem conteúdo real
     const hasContent = msg.conversation ||
                       msg.extendedTextMessage ||
