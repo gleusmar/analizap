@@ -298,13 +298,21 @@ export async function sendMessage(req, res) {
         } else {
           logger.info('real_message_id atualizado em background:', sentMessage.key.id);
 
-          // Emitir evento para o frontend para atualizar/remover mensagem temporária
+          // Buscar mensagem atualizada para enviar ao frontend
+          const { data: updatedMessage } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('id', savedMessage.id)
+            .single();
+
+          // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
-              real_message_id: sentMessage.key.id
+              real_message_id: sentMessage.key.id,
+              message: updatedMessage
             });
           }
         }
@@ -633,13 +641,21 @@ export async function sendAttachment(req, res) {
         } else {
           logger.info('real_message_id atualizado para anexo:', sentMessage.key.id);
 
-          // Emitir evento para o frontend para atualizar/remover mensagem temporária
+          // Buscar mensagem atualizada para enviar ao frontend
+          const { data: updatedMessage } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('id', savedMessage.id)
+            .single();
+
+          // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
-              real_message_id: sentMessage.key.id
+              real_message_id: sentMessage.key.id,
+              message: updatedMessage
             });
           }
         }
@@ -754,11 +770,29 @@ export async function sendLocation(req, res) {
       .from('messages')
       .update({ real_message_id: sentMessage.key.id, is_delivered: true, delivery_error: null })
       .eq('id', savedMessage.id)
-      .then(({ error }) => {
+      .then(async ({ error }) => {
         if (error) {
           logger.error('Erro ao atualizar real_message_id:', error);
         } else {
           logger.info('real_message_id atualizado para localização:', sentMessage.key.id);
+
+          // Buscar mensagem atualizada para enviar ao frontend
+          const { data: updatedMessage } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('id', savedMessage.id)
+            .single();
+
+          // Emitir evento para o frontend para atualizar mensagem temporária
+          const io = getIO();
+          if (io) {
+            io.emit('whatsapp:message_updated', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id,
+              message: updatedMessage
+            });
+          }
         }
       })
       .catch(error => {

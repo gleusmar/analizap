@@ -60,10 +60,10 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     });
 
     // Evento de atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
-    socketInstance.on('whatsapp:message_updated', ({ conversation_id, message_id, content, temp_message_id, real_message_id }) => {
-      console.log('Mensagem atualizada:', { conversation_id, message_id, content, temp_message_id, real_message_id });
+    socketInstance.on('whatsapp:message_updated', ({ conversation_id, message_id, content, temp_message_id, real_message_id, message }) => {
+      console.log('Mensagem atualizada:', { conversation_id, message_id, content, temp_message_id, real_message_id, message });
       if (onMessageUpdated) {
-        onMessageUpdated(conversation_id, message_id, content, temp_message_id, real_message_id);
+        onMessageUpdated(conversation_id, message_id, content, temp_message_id, real_message_id, message);
       }
     });
 

@@ -142,17 +142,43 @@ function Chat() {
   }, [selectedConversation?.id, refreshMessages]);
 
   // Callback para atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
-  const handleMessageUpdated = useCallback((conversationId, messageId, content, tempMessageId, realMessageId) => {
-    console.log('Mensagem atualizada:', { conversationId, messageId, content, tempMessageId, realMessageId });
+  const handleMessageUpdated = useCallback((conversationId, messageId, content, tempMessageId, realMessageId, message) => {
+    console.log('Mensagem atualizada:', { conversationId, messageId, content, tempMessageId, realMessageId, message });
 
-    // Se tiver temp_message_id, remover mensagem otimista correspondente
+    // Se tiver temp_message_id, atualizar mensagem otimista correspondente
     if (tempMessageId) {
       setOptimisticMessages(prev => {
         const convMessages = prev[conversationId] || [];
-        const filtered = convMessages.filter(m => m.message_id !== tempMessageId);
+        const updated = convMessages.map(m => {
+          if (m.message_id === tempMessageId) {
+            // Se tiver a mensagem completa, usa ela. Senão, atualiza parcialmente
+            if (message) {
+              return {
+                ...m,
+                ...message,
+                metadata: {
+                  ...m.metadata,
+                  ...message.metadata,
+                  loading: false
+                }
+              };
+            } else {
+              return {
+                ...m,
+                content: content || m.content,
+                metadata: {
+                  ...m.metadata,
+                  loading: false
+                },
+                real_message_id: realMessageId
+              };
+            }
+          }
+          return m;
+        });
         return {
           ...prev,
-          [conversationId]: filtered
+          [conversationId]: updated
         };
       });
     }
