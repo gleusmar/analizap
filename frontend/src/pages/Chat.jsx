@@ -757,10 +757,7 @@ function Chat() {
 
     try {
       // Enviar em background
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('caption', caption);
-      await conversationsAPI.sendAttachment(selectedConversation.id, formData);
+      await conversationsAPI.sendAttachment(selectedConversation.id, file, caption);
       // A mensagem definitiva chegará via Socket.io
     } catch (error) {
       console.error('Erro ao enviar anexo:', error);

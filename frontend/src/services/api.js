@@ -123,9 +123,10 @@ export const conversationsAPI = {
     api.put(`/conversations/${conversationId}/contact-name`, { contactName }),
   sendMessage: (conversationId, content, messageType = 'text', metadata = {}) =>
     api.post(`/conversations/${conversationId}/send`, { content, messageType, metadata }),
-  sendAttachment: (conversationId, file) => {
+  sendAttachment: (conversationId, file, caption = '') => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('caption', caption);
     return api.post(`/conversations/${conversationId}/attachment`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
