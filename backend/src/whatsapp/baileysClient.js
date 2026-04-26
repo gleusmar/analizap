@@ -761,8 +761,16 @@ function setupEvents(socket) {
         return;
       }
 
+      // Mensagem enviada por nós com notify - adicionar ao batching para processamento posterior
+      if (isFromMe && type === 'notify') {
+        logger.info('📤 Mensagem enviada por nós com notify, adicionando ao batching:', {
+          messageId: message.key?.id,
+          remoteJid: message.key?.remoteJid
+        });
+        addToMessageBatch(message, type);
+      }
       // Mensagem recebida com notify - emitir mensagem temporária E adicionar ao batching
-      if (!isFromMe && type === 'notify') {
+      else if (!isFromMe && type === 'notify') {
         logger.info('📨 Mensagem recebida com notify, emitindo mensagem temporária e adicionando ao batching:', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid
