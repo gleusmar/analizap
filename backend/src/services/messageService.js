@@ -828,15 +828,15 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
 
     const savedMessage = await saveMessage(messageData);
 
-    // Se não for from_me, incrementa contador de não lidas
+    // Se não for from_me e a conversa não estiver aberta, incrementa contador de não lidas
     if (!fromMe) {
       const { data: currentConv } = await supabase
         .from('conversations')
-        .select('unread_count')
+        .select('unread_count, is_open')
         .eq('id', conversation.id)
         .single();
 
-      if (currentConv) {
+      if (currentConv && !currentConv.is_open) {
         await supabase
           .from('conversations')
           .update({ unread_count: (currentConv.unread_count || 0) + 1 })
@@ -1144,7 +1144,7 @@ export async function openConversation(conversationId, sock = null) {
       throw error;
     }
 
-    // Zerar contador de mensagens não lidas ao abrir a conversa
+    // Zerar contador de mensagens não lidas ao abrir a conversa (limpa acumuladas)
     await markMessagesAsRead(conversationId);
 
     // Buscar informações da conversa
