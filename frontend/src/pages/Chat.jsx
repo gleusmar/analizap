@@ -181,8 +181,11 @@ function Chat() {
           [conversationId]: updated
         };
       });
+      // Não recarrega mensagens quando atualiza mensagem otimista - evita duplicação
+      return;
     }
 
+    // Se não tiver temp_message_id (atualização de mídia processada), recarrega
     if (conversationId === selectedConversation?.id) {
       // Invalidar cache e recarregar para mostrar a mensagem atualizada
       const cacheKey = `messages_${conversationId}`;

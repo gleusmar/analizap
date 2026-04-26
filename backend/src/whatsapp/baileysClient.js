@@ -740,11 +740,16 @@ function setupEvents(socket) {
       for (const message of messages) {
         // Não adicionar mensagens enviadas por nós ao batching - elas são processadas separadamente
         if (!message.key.fromMe) {
-          // Se for notify, não adiciona ao batch (aguarda append com conteúdo)
+          // Se for notify, verifica se tem conteúdo antes de adicionar ao batch
           if (type === 'notify') {
-            logger.info('Mensagem notify não adicionada ao batch, aguardando append:', {
-              messageId: message.key?.id
-            });
+            const hasContent = message.message && Object.keys(message.message).length > 0;
+            if (hasContent) {
+              addToMessageBatch(message, type);
+            } else {
+              logger.info('Mensagem notify sem conteúdo não adicionada ao batch, aguardando append:', {
+                messageId: message.key?.id
+              });
+            }
           } else {
             addToMessageBatch(message, type);
           }
@@ -783,13 +788,22 @@ function setupEvents(socket) {
         });
         addToMessageBatch(message, type);
       }
-      // Mensagem recebida com notify - NÃO processar, apenas aguardar append com conteúdo
+      // Mensagem recebida com notify - processar se tiver conteúdo, senão aguardar append
       else if (!isFromMe && type === 'notify') {
-        logger.info('📨 Mensagem recebida com notify, aguardando append com conteúdo:', {
-          messageId: message.key?.id,
-          remoteJid: message.key?.remoteJid
-        });
-        // Não adiciona ao batch e não processa - aguarda o append
+        const hasContent = message.message && Object.keys(message.message).length > 0;
+        if (hasContent) {
+          logger.info('📨 Mensagem recebida com notify e conteúdo, processando:', {
+            messageId: message.key?.id,
+            remoteJid: message.key?.remoteJid
+          });
+          await handleIncomingMessage(message, true); // true = processar
+        } else {
+          logger.info('📨 Mensagem recebida com notify sem conteúdo, aguardando append:', {
+            messageId: message.key?.id,
+            remoteJid: message.key?.remoteJid
+          });
+          // Não processa - aguarda o append com conteúdo
+        }
       } else if (!isFromMe && type === 'append') {
         // Mensagem recebida com append - processa agora que tem conteúdo
         logger.info('📨 Mensagem recebida com append, processando:', {
