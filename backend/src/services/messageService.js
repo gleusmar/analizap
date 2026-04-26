@@ -567,6 +567,13 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     const remoteJid = key.remoteJid;
     const fromMe = key.fromMe;
 
+    logger.info('processWhatsAppMessage chamado:', {
+      messageId: key?.id,
+      fromMe,
+      remoteJid,
+      hasContent: !!msg
+    });
+
     // Verifica se msg existe
     if (!msg) {
       logger.warn('Mensagem sem conteúdo, ignorando');

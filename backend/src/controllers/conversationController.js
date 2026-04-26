@@ -212,10 +212,26 @@ export async function sendMessage(req, res) {
       logger.error('Erro ao buscar usuário:', userError);
     }
 
+    logger.info('Verificando assinatura:', {
+      userId: req.user.id,
+      user: user,
+      has_signature: user?.has_signature,
+      nickname: user?.nickname,
+      message_type
+    });
+
     // Formatar mensagem com assinatura se o usuário tiver
     let formattedContent = content;
     if (user?.has_signature && user?.nickname && message_type === MESSAGE_TYPES.TEXT) {
       formattedContent = `*_${user.nickname}_*\n${content}`;
+      logger.info('Assinatura aplicada:', { nickname: user.nickname });
+    } else {
+      logger.info('Assinatura não aplicada:', {
+        hasUser: !!user,
+        hasSignature: user?.has_signature,
+        hasNickname: !!user?.nickname,
+        isText: message_type === MESSAGE_TYPES.TEXT
+      });
     }
 
     // Gerar ID temporário para a mensagem
