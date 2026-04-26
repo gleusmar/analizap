@@ -44,7 +44,7 @@ app.use((req, res, next) => {
   logger.info('Requisição recebida:', {
     method: req.method,
     path: req.path,
-    body: req.method === 'POST' ? JSON.stringify(req.body).substring(0, 200) : undefined
+    body: req.method === 'POST' ? req.body : undefined
   });
   next();
 });

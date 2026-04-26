@@ -186,11 +186,13 @@ export async function sendMessage(req, res) {
     const { conversationId } = req.params;
     const { content, message_type, metadata } = req.body;
 
-    logger.info('Recebida solicitação de envio de mensagem:', {
+    logger.info('📤 [POST /send] Requisição de envio de mensagem recebida:', {
       conversationId,
-      content: content?.substring(0, 50),
+      content,
       message_type,
-      metadata
+      metadata,
+      userId: req.user?.id,
+      userEmail: req.user?.email
     });
 
     const sock = getSocket();

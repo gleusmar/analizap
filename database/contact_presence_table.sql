@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS contact_presence (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  phone VARCHAR(20) UNIQUE NOT NULL,
+  phone VARCHAR(50) UNIQUE NOT NULL,
   presence VARCHAR(20) DEFAULT 'unavailable', -- 'available', 'unavailable', 'composing', 'recording', 'paused'
   last_seen_at TIMESTAMP WITH TIME ZONE,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
