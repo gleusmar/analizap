@@ -651,7 +651,7 @@ function setupEvents(socket) {
             conversationId: tempMessage.conversation_id
           });
 
-          // Atualizar message_id e real_message_id
+          // Atualizar message_id e real_message_id em background
           await supabase
             .from('messages')
             .update({
@@ -661,19 +661,11 @@ function setupEvents(socket) {
             })
             .eq('id', tempMessage.id);
 
-          // Emitir evento de atualização para o frontend
-          if (io) {
-            logger.info('Emitindo evento whatsapp:message_updated (messages.upsert):', {
-              conversation_id: tempMessage.conversation_id,
-              temp_message_id: tempMessage.message_id,
-              real_message_id: messageId
-            });
-            io.emit('whatsapp:message_updated', {
-              conversation_id: tempMessage.conversation_id,
-              temp_message_id: tempMessage.message_id,
-              real_message_id: messageId
-            });
-          }
+          logger.info('Mensagem temporária atualizada com message_id real em background:', {
+            tempMessageId: tempMessage.message_id,
+            realMessageId: messageId
+          });
+          // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
 
           return; // Não processar novamente
         }
@@ -696,20 +688,13 @@ function setupEvents(socket) {
             .update({ from_me: true })
             .eq('message_id', messageId);
 
-          logger.info('Emitindo evento whatsapp:message para o frontend:', {
+          logger.info('Mensagem enviada processada e salva no banco (não emitindo para evitar duplicação):', {
             messageId,
             conversation_id: processedMessage.conversation_id
           });
 
-          // Emitir evento imediatamente para o frontend (mesmo antes da mídia ser processada)
-          if (io) {
-            io.emit('whatsapp:message', {
-              conversation_id: processedMessage.conversation_id,
-              message: processedMessage
-            });
-          } else {
-            logger.warn('Socket.io não disponível para emitir mensagem');
-          }
+          // Não emitir whatsapp:message para mensagens enviadas - o endpoint /send já emitiu a temporária
+          // e o message_id foi atualizado em background
 
           // Se tiver mídia, processa em background e atualiza depois
           if (message.message) {

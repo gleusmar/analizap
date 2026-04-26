@@ -266,22 +266,9 @@ export async function sendMessage(req, res) {
         if (updateError) {
           logger.error('Erro ao atualizar real_message_id:', updateError);
         } else {
-          logger.info('real_message_id atualizado:', sentMessage.key.id);
-
-          // Emitir evento de atualização para o frontend substituir mensagem temporária
-          const io = getIO();
-          if (io) {
-            logger.info('Emitindo evento whatsapp:message_updated:', {
-              conversation_id: conversationId,
-              temp_message_id: savedMessage.message_id,
-              real_message_id: sentMessage.key.id
-            });
-            io.emit('whatsapp:message_updated', {
-              conversation_id: conversationId,
-              temp_message_id: savedMessage.message_id,
-              real_message_id: sentMessage.key.id
-            });
-          }
+          logger.info('real_message_id atualizado em background:', sentMessage.key.id);
+          // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
+          // e pode usar o real_message_id para atualizar o status quando necessário
         }
       })
       .catch(error => {
