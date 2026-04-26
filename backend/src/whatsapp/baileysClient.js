@@ -761,13 +761,16 @@ function setupEvents(socket) {
         return;
       }
 
-      // Mensagem recebida com notify - apenas emitir mensagem temporária
+      // Mensagem recebida com notify - emitir mensagem temporária E adicionar ao batching
       if (!isFromMe && type === 'notify') {
-        logger.info('📨 Mensagem recebida com notify, emitindo apenas mensagem temporária:', {
+        logger.info('📨 Mensagem recebida com notify, emitindo mensagem temporária e adicionando ao batching:', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid
         });
+        // Emitir mensagem temporária para exibir imediatamente
         await handleIncomingMessage(message, false); // false = não processar, apenas emitir temporária
+        // Adicionar ao batching para processamento posterior
+        addToMessageBatch(message, type);
       } else if (!isFromMe && type !== 'append') {
         // Mensagem recebida com outro tipo - processar normalmente
         logger.info('📨 Mensagem recebida (não é fromMe e não é append), processando:', {
