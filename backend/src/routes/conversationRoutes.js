@@ -50,7 +50,29 @@ router.put('/conversations/:conversationId/contact-name', updateContactNameRoute
 router.delete('/conversations/:conversationId', deleteConversation);
 
 // Enviar anexo
-router.post('/conversations/:conversationId/attachment', upload.single('file'), sendAttachment);
+router.post('/conversations/:conversationId/attachment',
+  (req, res, next) => {
+    console.log('🔍 Middleware antes do multer:', {
+      'content-type': req.headers['content-type'],
+      'has body': !!req.body,
+      'body keys': req.body ? Object.keys(req.body) : [],
+      'has files': !!req.files,
+      'has file': !!req.file
+    });
+    next();
+  },
+  upload.single('file'),
+  (req, res, next) => {
+    console.log('🔍 Middleware depois do multer:', {
+      'has file': !!req.file,
+      'file name': req.file?.originalname,
+      'file size': req.file?.size,
+      'file mimetype': req.file?.mimetype
+    });
+    next();
+  },
+  sendAttachment
+);
 
 // Enviar reação
 router.post('/conversations/:conversationId/reaction', sendReaction);

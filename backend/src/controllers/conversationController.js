@@ -25,6 +25,15 @@ export const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 100 * 1024 * 1024 // 100MB
+  },
+  fileFilter: (req, file, cb) => {
+    console.log('🔍 Multer fileFilter:', {
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    cb(null, true);
   }
 });
 
