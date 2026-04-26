@@ -184,12 +184,15 @@ export async function updateContactNameRoute(req, res) {
 export async function sendMessage(req, res) {
   try {
     const { conversationId } = req.params;
-    const { content, message_type, metadata } = req.body;
+    const { content, message_type, messageType, metadata } = req.body;
+
+    // Aceita tanto camelCase quanto snake_case para message_type
+    const messageTypeValue = message_type || messageType;
 
     logger.info('📤 [POST /send] Requisição de envio de mensagem recebida:', {
       conversationId,
       content,
-      message_type,
+      message_type: messageTypeValue,
       metadata,
       userId: req.user?.id,
       userEmail: req.user?.email
@@ -219,12 +222,12 @@ export async function sendMessage(req, res) {
       user: user,
       has_signature: user?.has_signature,
       nickname: user?.nickname,
-      message_type
+      message_type: messageTypeValue
     });
 
     // Formatar mensagem com assinatura se o usuário tiver
     let formattedContent = content;
-    if (user?.has_signature && user?.nickname && message_type === MESSAGE_TYPES.TEXT) {
+    if (user?.has_signature && user?.nickname && messageTypeValue === MESSAGE_TYPES.TEXT) {
       formattedContent = `*_${user.nickname}_*\n${content}`;
       logger.info('Assinatura aplicada:', { nickname: user.nickname });
     } else {
@@ -232,7 +235,7 @@ export async function sendMessage(req, res) {
         hasUser: !!user,
         hasSignature: user?.has_signature,
         hasNickname: !!user?.nickname,
-        isText: message_type === MESSAGE_TYPES.TEXT
+        isText: messageTypeValue === MESSAGE_TYPES.TEXT
       });
     }
 
@@ -244,7 +247,7 @@ export async function sendMessage(req, res) {
       conversation_id: conversationId,
       message_id: tempMessageId,
       from_me: true,
-      message_type: message_type || MESSAGE_TYPES.TEXT,
+      message_type: messageTypeValue || MESSAGE_TYPES.TEXT,
       content: formattedContent,
       metadata: metadata || {},
       timestamp: new Date().toISOString()
@@ -271,7 +274,7 @@ export async function sendMessage(req, res) {
       sock,
       conversationId,
       formattedContent,
-      message_type || MESSAGE_TYPES.TEXT,
+      messageTypeValue || MESSAGE_TYPES.TEXT,
       metadata || {}
     )
       .then(async (sentMessage) => {
