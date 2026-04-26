@@ -430,6 +430,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
 function setupEvents(socket) {
   logger.info('🎯 Configurando eventos do socket WhatsApp...');
   logger.info('📡 Socket disponível:', !!socket);
+  logger.info('📡 Socket type:', typeof socket);
 
   // Evento de atualização da conexão
   socket.ev.on('connection.update', async (update) => {
