@@ -144,6 +144,7 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     qrCode,
     phoneNumber,
     isConnected,
+    socket,
     connect,
     disconnect,
     getQR,

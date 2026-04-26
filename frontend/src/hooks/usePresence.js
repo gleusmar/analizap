@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSocket } from '../contexts/SocketContext';
 
-export function usePresence() {
+export function usePresence(socket) {
   const [presence, setPresence] = useState({}); // { phone: { presence: 'available'|'unavailable'|'composing', lastSeen: string|null } }
-  const socket = useSocket();
 
   useEffect(() => {
     if (!socket) return;

@@ -166,8 +166,8 @@ function Chat() {
     }
   }, [loadingMessages, selectedConversation]);
 
-  const { connectionStatus } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
-  const { getPresence } = usePresence();
+  const { connectionStatus, socket } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
+  const { getPresence } = usePresence(socket);
 
   // Função para formatar o status de presença
   const formatPresenceStatus = useCallback((phone) => {
