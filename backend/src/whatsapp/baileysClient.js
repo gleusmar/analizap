@@ -663,6 +663,11 @@ function setupEvents(socket) {
 
           // Emitir evento de atualização para o frontend
           if (io) {
+            logger.info('Emitindo evento whatsapp:message_updated (messages.upsert):', {
+              conversation_id: tempMessage.conversation_id,
+              temp_message_id: tempMessage.message_id,
+              real_message_id: messageId
+            });
             io.emit('whatsapp:message_updated', {
               conversation_id: tempMessage.conversation_id,
               temp_message_id: tempMessage.message_id,
@@ -881,7 +886,11 @@ function setupEvents(socket) {
 
   // Evento de atualização de presença
   socket.ev.on('presence.update', async (updates) => {
-    logger.info('📍 presence.update recebido:', { type: typeof updates, updates });
+    logger.info('📍 presence.update recebido:', { 
+      type: typeof updates, 
+      hasUpdates: !!updates,
+      updates: JSON.stringify(updates).substring(0, 500)
+    });
 
     // O formato pode ser: { id: string, presences: { [jid]: { lastKnownPresence: string } } }
     // ou array de objetos com mesmo formato
