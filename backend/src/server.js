@@ -41,11 +41,20 @@ app.use(express.json());
 
 // Middleware de log para debug
 app.use((req, res, next) => {
-  logger.info('Requisição recebida:', {
+  const logData = {
     method: req.method,
     path: req.path,
-    body: req.method === 'POST' ? req.body : undefined
-  });
+  };
+
+  if (req.method === 'POST') {
+    logData.body = req.body;
+    logData.headers = {
+      'content-type': req.headers['content-type'],
+      'authorization': req.headers['authorization'] ? '[REDACTED]' : undefined
+    };
+  }
+
+  logger.info('Requisição recebida:', logData);
   next();
 });
 
