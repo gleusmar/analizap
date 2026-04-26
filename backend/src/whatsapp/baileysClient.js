@@ -309,9 +309,10 @@ export function setSocketIO(socketIOInstance) {
 export async function createWhatsAppSocket(sessionIdParam = 'default', syncPeriodDaysParam = null) {
   sessionId = sessionIdParam;
 
-  logger.info('createWhatsAppSocket chamado', {
+  logger.info('🚀 createWhatsAppSocket chamado', {
     sessionId,
-    syncPeriodDaysParam
+    syncPeriodDaysParam,
+    sockExists: !!sock
   });
 
   try {
@@ -410,7 +411,9 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     });
 
     // Configura eventos
+    logger.info('📡 Chamando setupEvents...');
     setupEvents(sock);
+    logger.info('✅ setupEvents chamado com sucesso');
 
     logger.info('Socket WhatsApp criado com sucesso');
     return sock;
