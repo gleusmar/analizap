@@ -1308,6 +1308,14 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
  */
 export async function sendWhatsAppAttachment(sock, conversationId, file, caption = '') {
   try {
+    logger.info('sendWhatsAppAttachment chamado:', {
+      conversationId,
+      fileName: file?.originalname,
+      mimeType: file?.mimetype,
+      fileSize: file?.size,
+      caption
+    });
+
     // Obtém conversa para obter o phone
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -1316,8 +1324,11 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
       .single();
 
     if (convError || !conversation) {
+      logger.error('Conversa não encontrada:', convError);
       throw new Error('Conversa não encontrada');
     }
+
+    logger.info('Conversa encontrada:', { phone: conversation.phone });
 
     const phoneJid = `${conversation.phone}@s.whatsapp.net`;
 
@@ -1332,17 +1343,20 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
         image: file.buffer,
         caption: caption || ''
       };
+      logger.info('Tipo de arquivo: imagem');
     } else if (mimeType.startsWith('video/')) {
       messageType = 'video';
       messageOptions = {
         video: file.buffer,
         caption: caption || ''
       };
+      logger.info('Tipo de arquivo: vídeo');
     } else if (mimeType.startsWith('audio/')) {
       messageType = 'audio';
       messageOptions = {
         audio: file.buffer
       };
+      logger.info('Tipo de arquivo: áudio');
     } else {
       messageType = 'document';
       messageOptions = {
@@ -1351,10 +1365,13 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
         fileName: file.originalname,
         caption: caption || ''
       };
+      logger.info('Tipo de arquivo: documento');
     }
 
+    logger.info('Enviando mensagem para o WhatsApp...');
     // Envia mensagem
     const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
+    logger.info('Mensagem enviada para o WhatsApp com sucesso:', sentMessage.key?.id);
 
     // Adicionar informações de tipo e conteúdo ao resultado
     sentMessage.messageType = messageType;
@@ -1367,7 +1384,11 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
 
     return sentMessage;
   } catch (error) {
-    logger.error('Erro ao enviar anexo:', error);
+    logger.error('Erro ao enviar anexo para WhatsApp:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     throw error;
   }
 }

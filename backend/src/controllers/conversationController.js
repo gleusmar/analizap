@@ -512,20 +512,37 @@ export async function sendAttachment(req, res) {
     const { caption } = req.body;
     const file = req.file;
 
+    logger.info('📎 [POST /attachment] Requisição de envio de anexo recebida:', {
+      conversationId,
+      caption,
+      hasFile: !!file,
+      fileName: file?.originalname,
+      fileMimetype: file?.mimetype,
+      fileSize: file?.size
+    });
+
+    if (!file) {
+      logger.error('Arquivo não encontrado na requisição');
+      return res.status(400).json({ error: 'Arquivo não encontrado' });
+    }
 
     const sock = getSocket();
     if (!sock) {
+      logger.error('WhatsApp não está conectado');
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
 
+    logger.info('Enviando anexo para o WhatsApp...');
     const sentMessage = await sendWhatsAppAttachment(
       sock,
       conversationId,
       file,
       caption
     );
+    logger.info('Anexo enviado para o WhatsApp com sucesso:', sentMessage);
 
     // Fazer upload do arquivo para Supabase Storage
+    logger.info('Fazendo upload do arquivo para Supabase...');
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(
       process.env.SUPABASE_URL,
@@ -546,16 +563,21 @@ export async function sendAttachment(req, res) {
       throw uploadError;
     }
 
+    logger.info('Upload para Supabase realizado com sucesso');
+
     // Obter URL pública
     const { data: { publicUrl } } = supabase
       .storage
       .from('whatsapp-media')
       .getPublicUrl(fileName);
 
+    logger.info('URL pública obtida:', publicUrl);
+
     // Gerar ID temporário para a mensagem
     const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Salvar mensagem com ID temporário
+    logger.info('Salvando mensagem no banco...');
     const savedMessage = await saveMessage({
       conversation_id: conversationId,
       message_id: tempMessageId,
@@ -565,6 +587,7 @@ export async function sendAttachment(req, res) {
       metadata: sentMessage.metadata || {},
       timestamp: new Date().toISOString()
     });
+    logger.info('Mensagem salva no banco com sucesso');
 
     // Atualizar last_message_at da conversa
     await supabase
@@ -637,7 +660,13 @@ export async function sendAttachment(req, res) {
       savedMessage
     });
   } catch (error) {
-    logger.error('Erro ao enviar anexo:', error);
+    logger.error('Erro ao enviar anexo:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      conversationId,
+      hasFile: !!req.file
+    });
     res.status(500).json({ error: 'Erro ao enviar anexo' });
   }
 }
