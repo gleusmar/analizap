@@ -1369,8 +1369,17 @@ async function handleIncomingMessage(message, shouldProcess = true) {
         // Se tiver mídia, processa em background
         if (message.message) {
           const messageTypeSaved = savedMessage.message_type;
+          logger.info('🔍 Verificando se precisa processar mídia:', {
+            messageId: savedMessage.message_id,
+            messageType: messageTypeSaved,
+            hasMessage: !!message.message
+          });
           if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
                MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
+            logger.info('🚀 Iniciando processamento de mídia em background:', {
+              messageId: savedMessage.message_id,
+              messageType: messageTypeSaved
+            });
             processMessageMedia(sock, message, messageTypeSaved, savedMessage.message_id)
               .then(async (publicUrl) => {
                 const { createClient } = await import('@supabase/supabase-js');
