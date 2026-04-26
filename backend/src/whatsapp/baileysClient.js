@@ -748,11 +748,11 @@ function setupEvents(socket) {
     // Se é mensagem individual recente, processa imediatamente
     for (const message of messages) {
       const isFromMe = message.key.fromMe;
-      logger.info('🔍 Processando mensagem individual:', { 
-        messageId: message.key?.id, 
-        isFromMe, 
+      logger.info('🔍 Processando mensagem individual:', {
+        messageId: message.key?.id,
+        isFromMe,
         type,
-        remoteJid: message.key?.remoteJid 
+        remoteJid: message.key?.remoteJid
       });
 
       if (isFromMe && type === 'append') {
@@ -761,16 +761,23 @@ function setupEvents(socket) {
         return;
       }
 
-      // Mensagem recebida - processa imediatamente
-      if (!isFromMe) {
-        logger.info('📨 Mensagem recebida (não é fromMe), chamando handleIncomingMessage:', {
+      // Mensagem recebida com notify - apenas emitir mensagem temporária
+      if (!isFromMe && type === 'notify') {
+        logger.info('📨 Mensagem recebida com notify, emitindo apenas mensagem temporária:', {
+          messageId: message.key?.id,
+          remoteJid: message.key?.remoteJid
+        });
+        await handleIncomingMessage(message, false); // false = não processar, apenas emitir temporária
+      } else if (!isFromMe && type !== 'append') {
+        // Mensagem recebida com outro tipo - processar normalmente
+        logger.info('📨 Mensagem recebida (não é fromMe e não é append), processando:', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid,
           type
         });
-        await handleIncomingMessage(message);
+        await handleIncomingMessage(message, true); // true = processar
       } else {
-        logger.info('⏭️ Mensagem ignorada (não é fromMe e não é append/notify):', {
+        logger.info('⏭️ Mensagem ignorada (append será processado pelo batching):', {
           messageId: message.key?.id,
           isFromMe,
           type
@@ -1191,8 +1198,10 @@ function isGroupOrBroadcast(jid) {
 
 /**
  * Trata mensagem recebida
+ * @param {Object} message - Mensagem do WhatsApp
+ * @param {boolean} shouldProcess - Se true, processa e salva a mensagem. Se false, apenas emite mensagem temporária.
  */
-async function handleIncomingMessage(message) {
+async function handleIncomingMessage(message, shouldProcess = true) {
   try {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
@@ -1325,7 +1334,8 @@ async function handleIncomingMessage(message) {
     }
 
     // Processa e salva a mensagem no banco de dados em background (não await)
-    processWhatsAppMessage(message, sock, syncPeriodDays)
+    if (shouldProcess) {
+      processWhatsAppMessage(message, sock, syncPeriodDays)
       .then(savedMessage => {
         if (!savedMessage) return;
 
@@ -1378,6 +1388,7 @@ async function handleIncomingMessage(message) {
       .catch(error => {
         logger.error('Erro ao processar mensagem em background:', error);
       });
+    }
   } catch (error) {
     // Tratar erro de Bad MAC silenciosamente (erro de criptografia comum do Baileys)
     if (error.message && error.message.includes('Bad MAC')) {
