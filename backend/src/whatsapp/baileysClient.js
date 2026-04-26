@@ -694,6 +694,7 @@ function setupEvents(socket) {
               }
             }
           }
+        }
       } else if (!isFromMe) {
         // Mensagem recebida - processa imediatamente
         await handleIncomingMessage(message, io);
