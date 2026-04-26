@@ -29,6 +29,12 @@ api.interceptors.request.use(
         console.error('Erro ao ler token do localStorage:', e);
       }
     }
+
+    // Remover Content-Type padrão se for FormData (axios define automaticamente com boundary)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     return config;
   },
   (error) => {
@@ -127,9 +133,8 @@ export const conversationsAPI = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('caption', caption);
-    return api.post(`/conversations/${conversationId}/attachment`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    // Não especificar Content-Type manualmente - o axios define automaticamente com o boundary correto
+    return api.post(`/conversations/${conversationId}/attachment`, formData);
   },
   sendLocation: (conversationId, latitude, longitude) =>
     api.post(`/conversations/${conversationId}/location`, { latitude, longitude }),
