@@ -690,7 +690,13 @@ function setupEvents(socket) {
           const { processMessageMedia } = await import('../services/mediaService.js');
           processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
             .then(async (publicUrl) => {
-              // Atualiza a mensagem com a URL do Supabase
+              logger.info('Mídia processada com sucesso, atualizando mensagem:', {
+                messageId: processedMessage.message_id,
+                messageType: messageTypeSaved,
+                publicUrl
+              });
+
+              // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
               const { error } = await supabase
                 .from('messages')
                 .update({ content: publicUrl })
@@ -699,6 +705,7 @@ function setupEvents(socket) {
               if (error) {
                 logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
               } else {
+                logger.info('Mensagem atualizada com URL da mídia no banco');
                 // Emitir evento de atualização de mensagem quando a mídia for processada
                 if (io) {
                   io.emit('whatsapp:message_updated', {

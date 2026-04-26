@@ -748,6 +748,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         height: msg.imageMessage.height,
         fileLength: msg.imageMessage.fileLength
       };
+      logger.info('📷 Imagem detectada, metadados:', metadata);
     }
     // Áudio
     else if (msg.audioMessage) {
@@ -758,6 +759,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         seconds: msg.audioMessage.seconds,
         fileLength: msg.audioMessage.fileLength
       };
+      logger.info('🎵 Áudio detectado, metadados:', metadata);
     }
     // Vídeo
     else if (msg.videoMessage) {
@@ -772,6 +774,12 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         fileLength: msg.videoMessage.fileLength,
         thumbnail: msg.videoMessage.jpegThumbnail ? `data:image/jpeg;base64,${msg.videoMessage.jpegThumbnail.toString('base64')}` : null
       };
+      logger.info('🎬 Vídeo detectado, metadados:', {
+        caption: metadata.caption,
+        seconds: metadata.seconds,
+        width: metadata.width,
+        height: metadata.height
+      });
     }
     // Documento
     else if (msg.documentMessage) {
