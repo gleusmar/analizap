@@ -696,7 +696,18 @@ function setupEvents(socket) {
           }
       } else if (!isFromMe) {
         // Mensagem recebida - processa imediatamente
+        logger.info('📨 Mensagem recebida (não é fromMe), chamando handleIncomingMessage:', {
+          messageId: message.key?.id,
+          remoteJid: message.key?.remoteJid,
+          type
+        });
         await handleIncomingMessage(message);
+      } else {
+        logger.info('⏭️ Mensagem ignorada (não é fromMe e não é append/notify):', {
+          messageId: message.key?.id,
+          isFromMe,
+          type
+        });
       }
     }
   });
@@ -1056,11 +1067,13 @@ async function handleIncomingMessage(message) {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
 
-    logger.info('📥 handleIncomingMessage chamada:', { 
-      messageId: key?.id, 
-      remoteJid, 
+    logger.info('📥 handleIncomingMessage chamada:', {
+      messageId: key?.id,
+      remoteJid,
       hasMessage: !!msg,
-      pushName 
+      pushName,
+      messageKeys: msg ? Object.keys(msg) : [],
+      isGroupOrBroadcast: isGroupOrBroadcast(remoteJid)
     });
 
     // Ignorar mensagens de grupo, status, newsletter e canais
@@ -1068,6 +1081,8 @@ async function handleIncomingMessage(message) {
       logger.info('🚫 Mensagem de grupo/broadcast ignorada:', remoteJid);
       return;
     }
+
+    logger.info('✅ Mensagem não é de grupo/broadcast, continuando processamento');
 
     // Extrair tipo de mensagem para log
     let messageType = 'texto';
@@ -1117,6 +1132,8 @@ async function handleIncomingMessage(message) {
       return; // Não processar como mensagem normal
     }
 
+    logger.info('🔤 Tipo de mensagem determinada:', { messageType, isCall: !!msg.call });
+
     const phone = remoteJid.split('@')[0];
     const messageId = key.id;
 
@@ -1124,7 +1141,10 @@ async function handleIncomingMessage(message) {
     const isMedia = msg.imageMessage || msg.audioMessage || msg.videoMessage ||
                     msg.documentMessage || msg.stickerMessage;
 
+    logger.info('📦 Verificando isMedia:', { isMedia });
+
     // Extrair informações básicas da mensagem para emitir imediatamente (apenas para texto)
+    logger.info('💬 Chamando getOrCreateConversation...');
     const conversation = await getOrCreateConversation(
       remoteJid,
       pushName || null,
@@ -1134,8 +1154,14 @@ async function handleIncomingMessage(message) {
       messageTimestamp // passa timestamp para verificar período de sincronização
     );
 
+    logger.info('📋 Conversa obtida/criada:', {
+      conversationId: conversation?.id,
+      conversationPhone: conversation?.phone
+    });
+
     // Emitir mensagem temporária apenas para mensagens de texto (não para mídia)
     if (io && conversation && !isMedia) {
+      logger.info('📤 Emitindo mensagem temporária para o frontend...');
       const tempMessage = {
         id: null, // Será preenchido após salvar
         message_id: messageId,
@@ -1152,6 +1178,13 @@ async function handleIncomingMessage(message) {
         conversation_id: conversation.id,
         message: tempMessage,
         is_temp: true // Flag para indicar que é mensagem temporária
+      });
+      logger.info('✅ Mensagem temporária emitida com sucesso');
+    } else {
+      logger.info('⏭️ Não emitindo mensagem temporária:', {
+        hasIo: !!io,
+        hasConversation: !!conversation,
+        isMedia
       });
     }
 
@@ -1215,7 +1248,12 @@ async function handleIncomingMessage(message) {
       logger.warn('Erro de criptografia (Bad MAC) - ignorando mensagem');
       return;
     }
-    logger.error('Erro ao tratar mensagem recebida:', error);
+    logger.error('❌ Erro ao tratar mensagem recebida:', {
+      error: error.message,
+      stack: error.stack,
+      messageId: message?.key?.id,
+      remoteJid: message?.key?.remoteJid
+    });
   }
 }
 
