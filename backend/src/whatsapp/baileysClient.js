@@ -740,7 +740,14 @@ function setupEvents(socket) {
       for (const message of messages) {
         // Não adicionar mensagens enviadas por nós ao batching - elas são processadas separadamente
         if (!message.key.fromMe) {
-          addToMessageBatch(message, type);
+          // Se for notify, não adiciona ao batch (aguarda append com conteúdo)
+          if (type === 'notify') {
+            logger.info('Mensagem notify não adicionada ao batch, aguardando append:', {
+              messageId: message.key?.id
+            });
+          } else {
+            addToMessageBatch(message, type);
+          }
         } else {
           logger.info('Mensagem enviada por nós não adicionada ao batching, processando separadamente:', {
             messageId: message.key?.id
@@ -776,16 +783,20 @@ function setupEvents(socket) {
         });
         addToMessageBatch(message, type);
       }
-      // Mensagem recebida com notify - emitir mensagem temporária E adicionar ao batching
+      // Mensagem recebida com notify - NÃO processar, apenas aguardar append com conteúdo
       else if (!isFromMe && type === 'notify') {
-        logger.info('📨 Mensagem recebida com notify, emitindo mensagem temporária e adicionando ao batching:', {
+        logger.info('📨 Mensagem recebida com notify, aguardando append com conteúdo:', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid
         });
-        // Emitir mensagem temporária para exibir imediatamente
-        await handleIncomingMessage(message, false); // false = não processar, apenas emitir temporária
-        // Adicionar ao batching para processamento posterior
-        addToMessageBatch(message, type);
+        // Não adiciona ao batch e não processa - aguarda o append
+      } else if (!isFromMe && type === 'append') {
+        // Mensagem recebida com append - processa agora que tem conteúdo
+        logger.info('📨 Mensagem recebida com append, processando:', {
+          messageId: message.key?.id,
+          remoteJid: message.key?.remoteJid
+        });
+        await handleIncomingMessage(message, true); // true = processar
       } else if (!isFromMe && type !== 'append') {
         // Mensagem recebida com outro tipo - processar normalmente
         logger.info('📨 Mensagem recebida (não é fromMe e não é append), processando:', {
