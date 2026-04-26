@@ -238,13 +238,13 @@ export async function sendMessage(req, res) {
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    // Emitir mensagem para o frontend (não é temporária, já está salva)
+    // Emitir mensagem para o frontend como temporária (ID será atualizado depois)
     const io = getIO();
     if (io) {
       io.emit('whatsapp:message', {
         conversation_id: conversationId,
         message: savedMessage,
-        is_temp: false
+        is_temp: true
       });
     }
 
@@ -267,6 +267,16 @@ export async function sendMessage(req, res) {
           logger.error('Erro ao atualizar real_message_id:', updateError);
         } else {
           logger.info('real_message_id atualizado:', sentMessage.key.id);
+
+          // Emitir evento de atualização para o frontend substituir mensagem temporária
+          const io = getIO();
+          if (io) {
+            io.emit('whatsapp:message_updated', {
+              conversation_id: conversationId,
+              temp_message_id: savedMessage.message_id,
+              real_message_id: sentMessage.key.id
+            });
+          }
         }
       })
       .catch(error => {

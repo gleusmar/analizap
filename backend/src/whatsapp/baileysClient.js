@@ -592,6 +592,7 @@ function setupEvents(socket) {
 
         const messageId = message.key.id;
         const remoteJid = message.key.remoteJid;
+        const messageTimestamp = message.messageTimestamp;
 
         logger.info('Mensagem enviada por nós detectada:', { messageId, type });
 
@@ -622,6 +623,52 @@ function setupEvents(socket) {
             .from('messages')
             .update({ is_delivered: true })
             .eq('id', existingMessage.id);
+
+          return; // Não processar novamente
+        }
+
+        // Verificar se existe mensagem temporária (enviada pelo endpoint /send) que precisa ser atualizada
+        // Buscar mensagem temporária na mesma conversa com timestamp próximo (dentro de 10 segundos)
+        const messageTime = messageTimestamp * 1000; // Converter para milissegundos
+        const tenSecondsAgo = new Date(messageTime - 10000).toISOString();
+        const tenSecondsLater = new Date(messageTime + 10000).toISOString();
+
+        const { data: tempMessage } = await supabase
+          .from('messages')
+          .select('id, message_id, conversation_id')
+          .eq('from_me', true)
+          .ilike('message_id', 'temp_%')
+          .gte('created_at', tenSecondsAgo)
+          .lte('created_at', tenSecondsLater)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (tempMessage) {
+          logger.info('Mensagem temporária encontrada, atualizando message_id e real_message_id:', {
+            tempMessageId: tempMessage.message_id,
+            realMessageId: messageId,
+            conversationId: tempMessage.conversation_id
+          });
+
+          // Atualizar message_id e real_message_id
+          await supabase
+            .from('messages')
+            .update({
+              message_id: messageId,
+              real_message_id: messageId,
+              is_delivered: true
+            })
+            .eq('id', tempMessage.id);
+
+          // Emitir evento de atualização para o frontend
+          if (io) {
+            io.emit('whatsapp:message_updated', {
+              conversation_id: tempMessage.conversation_id,
+              temp_message_id: tempMessage.message_id,
+              real_message_id: messageId
+            });
+          }
 
           return; // Não processar novamente
         }
@@ -795,10 +842,26 @@ function setupEvents(socket) {
         process.env.SUPABASE_SERVICE_KEY
       );
 
+      // Se o phone tiver formato de LID (número muito longo), tentar mapear
+      let finalPhone = phone;
+      if (phone.length > 20) {
+        // Provavelmente é um LID
+        const { data: mapping } = await supabase
+          .from('lid_mappings')
+          .select('phone')
+          .eq('lid', `${phone}@lid`)
+          .maybeSingle();
+
+        if (mapping) {
+          finalPhone = mapping.phone;
+          logger.info('LID mapeado para phone em savePresenceToDB:', { lid: phone, phone: finalPhone });
+        }
+      }
+
       const { error } = await supabase
         .from('contact_presence')
         .upsert({
-          phone,
+          phone: finalPhone,
           presence,
           last_seen_at: lastSeenAt,
           updated_at: new Date().toISOString()
@@ -809,7 +872,7 @@ function setupEvents(socket) {
       if (error) {
         logger.error('Erro ao salvar presença no banco:', error);
       } else {
-        logger.info('Presença salva no banco:', { phone, presence, lastSeenAt });
+        logger.info('Presença salva no banco:', { phone: finalPhone, presence, lastSeenAt });
       }
     } catch (error) {
       logger.error('Erro ao salvar presença no banco:', error);
@@ -840,7 +903,28 @@ function setupEvents(socket) {
     }
 
     for (const { id, presences } of updatesArray) {
-      const phone = id.split('@')[0]; // Extrair phone do JID
+      // Extrair phone do JID (pode ser LID ou phone real)
+      let phone = id.split('@')[0];
+
+      // Se for LID, mapear para phone real
+      if (id.endsWith('@lid')) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(
+          process.env.SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_KEY
+        );
+
+        const { data: mapping } = await supabase
+          .from('lid_mappings')
+          .select('phone')
+          .eq('lid', id)
+          .maybeSingle();
+
+        if (mapping) {
+          phone = mapping.phone;
+          logger.info('LID mapeado para phone em presence.update:', { lid: id, phone });
+        }
+      }
 
       for (const [jid, presence] of Object.entries(presences)) {
         logger.info('Atualização de presença recebida:', { phone, jid, presence });
@@ -855,6 +939,7 @@ function setupEvents(socket) {
             presence: presence.lastKnownPresence,
             last_seen: presence.lastKnownPresence === 'unavailable' ? new Date().toISOString() : null
           });
+          logger.info('Evento whatsapp:presence_update emitido para o frontend:', { phone, presence: presence.lastKnownPresence });
         }
       }
     }
@@ -1109,6 +1194,12 @@ async function handleIncomingMessage(message) {
     }
 
     logger.info('✅ Mensagem não é de grupo/broadcast, continuando processamento');
+
+    // Verificar se a mensagem tem conteúdo válido
+    if (!msg || Object.keys(msg).length === 0) {
+      logger.warn('Mensagem sem conteúdo válido, ignorando:', { messageId: key?.id, remoteJid });
+      return;
+    }
 
     // Extrair tipo de mensagem para log
     let messageType = 'texto';
