@@ -553,6 +553,170 @@ function setupEvents(socket) {
     await saveAuthState(authState);
   });
 
+  // Função para processar mensagens enviadas por nós
+  async function processSentMessage(message, syncPeriodDays) {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    );
+
+    const messageId = message.key.id;
+    const remoteJid = message.key.remoteJid;
+    const messageTimestamp = message.messageTimestamp;
+
+    logger.info('Processando mensagem enviada por nós:', { messageId });
+
+    // Ignorar mensagens de grupo, status, newsletter e canais
+    if (isGroupOrBroadcast(remoteJid)) {
+      return;
+    }
+
+    const phone = remoteJid.split('@')[0];
+
+    // Obter conversation_id
+    const { data: conversation } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('phone', phone)
+      .single();
+
+    const conversationId = conversation?.id;
+
+    // Verificar se mensagem já existe (por message_id ou real_message_id)
+    const { data: existingMessage } = await supabase
+      .from('messages')
+      .select('id, message_id, real_message_id')
+      .or(`message_id.eq.${messageId},real_message_id.eq.${messageId}`)
+      .single();
+
+    if (existingMessage) {
+      logger.info('Mensagem já existe (message_id ou real_message_id), atualizando status:', {
+        messageId,
+        existingMessageId: existingMessage.id,
+        existingMessageId: existingMessage.message_id,
+        existingRealMessageId: existingMessage.real_message_id
+      });
+
+      // Atualizar status para entregue se necessário
+      await supabase
+        .from('messages')
+        .update({ is_delivered: true })
+        .eq('id', existingMessage.id);
+
+      return; // Não processar novamente
+    }
+
+    // Verificar se existe mensagem temporária (enviada pelo endpoint /send) que precisa ser atualizada
+    // Buscar mensagem temporária na mesma conversa com timestamp próximo (dentro de 10 segundos)
+    const messageTime = messageTimestamp * 1000; // Converter para milissegundos
+    const tenSecondsAgo = new Date(messageTime - 10000).toISOString();
+    const tenSecondsLater = new Date(messageTime + 10000).toISOString();
+
+    let tempMessage = null;
+    if (conversationId) {
+      const { data: tempMsg } = await supabase
+        .from('messages')
+        .select('id, message_id, conversation_id')
+        .eq('conversation_id', conversationId)
+        .eq('from_me', true)
+        .ilike('message_id', 'temp_%')
+        .gte('created_at', tenSecondsAgo)
+        .lte('created_at', tenSecondsLater)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      tempMessage = tempMsg;
+    }
+
+    if (tempMessage) {
+      logger.info('Mensagem temporária encontrada, atualizando message_id e real_message_id:', {
+        tempMessageId: tempMessage.message_id,
+        realMessageId: messageId,
+        conversationId: tempMessage.conversation_id
+      });
+
+      // Atualizar message_id e real_message_id em background
+      await supabase
+        .from('messages')
+        .update({
+          message_id: messageId,
+          real_message_id: messageId,
+          is_delivered: true
+        })
+        .eq('id', tempMessage.id);
+
+      logger.info('Mensagem temporária atualizada com message_id real em background:', {
+        tempMessageId: tempMessage.message_id,
+        realMessageId: messageId
+      });
+      // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
+
+      return; // Não processar novamente
+    }
+
+    logger.info('Processando mensagem enviada (não encontrou temporária):', { messageId, remoteJid });
+
+    // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
+    const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
+
+    logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
+
+    const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
+
+    logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
+
+    // Se a mensagem foi processada, atualiza para garantir que é from_me = true
+    if (processedMessage) {
+      await supabase
+        .from('messages')
+        .update({ from_me: true })
+        .eq('message_id', messageId);
+
+      logger.info('Mensagem enviada processada e salva no banco (não emitindo para evitar duplicação):', {
+        messageId,
+        conversation_id: processedMessage.conversation_id
+      });
+
+      // Não emitir whatsapp:message para mensagens enviadas - o endpoint /send já emitiu a temporária
+      // e o message_id foi atualizado em background
+
+      // Se tiver mídia, processa em background e atualiza depois
+      if (message.message) {
+        const messageTypeSaved = processedMessage.message_type;
+        if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
+             MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
+          // Processa mídia em background para não bloquear
+          const { processMessageMedia } = await import('../services/mediaService.js');
+          processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
+            .then(async (publicUrl) => {
+              // Atualiza a mensagem com a URL do Supabase
+              const { error } = await supabase
+                .from('messages')
+                .update({ content: publicUrl })
+                .eq('message_id', processedMessage.message_id);
+
+              if (error) {
+                logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
+              } else {
+                // Emitir evento de atualização de mensagem quando a mídia for processada
+                if (io) {
+                  io.emit('whatsapp:message_updated', {
+                    conversation_id: processedMessage.conversation_id,
+                    message_id: processedMessage.message_id,
+                    content: publicUrl
+                  });
+                }
+              }
+            })
+            .catch(error => {
+              logger.error('Erro ao processar mídia:', error);
+            });
+        }
+      }
+    }
+  }
+
   // Evento de atualização de mensagens
   logger.info('📝 Registrando evento messages.upsert...');
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -567,7 +731,16 @@ function setupEvents(socket) {
     if (type === 'append' || messages.length > 10) {
       logger.info('📦 Usando batching para mensagens:', { count: messages.length, type });
       for (const message of messages) {
-        addToMessageBatch(message, type);
+        // Não adicionar mensagens enviadas por nós ao batching - elas são processadas separadamente
+        if (!message.key.fromMe) {
+          addToMessageBatch(message, type);
+        } else {
+          logger.info('Mensagem enviada por nós não adicionada ao batching, processando separadamente:', {
+            messageId: message.key?.id
+          });
+          // Processar mensagem enviada por nós individualmente
+          await processSentMessage(message, syncPeriodDays);
+        }
       }
       return;
     }
@@ -584,160 +757,12 @@ function setupEvents(socket) {
 
       if (isFromMe && type === 'append') {
         // Mensagem enviada por nós - processa apenas em append (notify causa duplicação)
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(
-          process.env.SUPABASE_URL,
-          process.env.SUPABASE_SERVICE_KEY
-        );
+        await processSentMessage(message, syncPeriodDays);
+        return;
+      }
 
-        const messageId = message.key.id;
-        const remoteJid = message.key.remoteJid;
-        const messageTimestamp = message.messageTimestamp;
-
-        logger.info('Mensagem enviada por nós detectada:', { messageId, type });
-
-        // Ignorar mensagens de grupo, status, newsletter e canais
-        if (isGroupOrBroadcast(remoteJid)) {
-          return;
-        }
-
-        const phone = remoteJid.split('@')[0];
-
-        // Verificar se mensagem já existe (por message_id ou real_message_id)
-        const { data: existingMessage } = await supabase
-          .from('messages')
-          .select('id, message_id, real_message_id')
-          .or(`message_id.eq.${messageId},real_message_id.eq.${messageId}`)
-          .single();
-
-        if (existingMessage) {
-          logger.info('Mensagem já existe (message_id ou real_message_id), atualizando status:', {
-            messageId,
-            existingMessageId: existingMessage.id,
-            existingMessageId: existingMessage.message_id,
-            existingRealMessageId: existingMessage.real_message_id
-          });
-
-          // Atualizar status para entregue se necessário
-          await supabase
-            .from('messages')
-            .update({ is_delivered: true })
-            .eq('id', existingMessage.id);
-
-          return; // Não processar novamente
-        }
-
-        // Verificar se existe mensagem temporária (enviada pelo endpoint /send) que precisa ser atualizada
-        // Buscar mensagem temporária na mesma conversa com timestamp próximo (dentro de 10 segundos)
-        const messageTime = messageTimestamp * 1000; // Converter para milissegundos
-        const tenSecondsAgo = new Date(messageTime - 10000).toISOString();
-        const tenSecondsLater = new Date(messageTime + 10000).toISOString();
-
-        const { data: tempMessage } = await supabase
-          .from('messages')
-          .select('id, message_id, conversation_id')
-          .eq('from_me', true)
-          .ilike('message_id', 'temp_%')
-          .gte('created_at', tenSecondsAgo)
-          .lte('created_at', tenSecondsLater)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (tempMessage) {
-          logger.info('Mensagem temporária encontrada, atualizando message_id e real_message_id:', {
-            tempMessageId: tempMessage.message_id,
-            realMessageId: messageId,
-            conversationId: tempMessage.conversation_id
-          });
-
-          // Atualizar message_id e real_message_id em background
-          await supabase
-            .from('messages')
-            .update({
-              message_id: messageId,
-              real_message_id: messageId,
-              is_delivered: true
-            })
-            .eq('id', tempMessage.id);
-
-          logger.info('Mensagem temporária atualizada com message_id real em background:', {
-            tempMessageId: tempMessage.message_id,
-            realMessageId: messageId
-          });
-          // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
-
-          return; // Não processar novamente
-        }
-
-        logger.info('Processando mensagem enviada:', { messageId, remoteJid });
-
-        // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
-        const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
-
-        logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
-
-        const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
-
-        logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
-
-        // Se a mensagem foi processada, atualiza para garantir que é from_me = true
-        if (processedMessage) {
-          await supabase
-            .from('messages')
-            .update({ from_me: true })
-            .eq('message_id', messageId);
-
-          logger.info('Mensagem enviada processada e salva no banco (não emitindo para evitar duplicação):', {
-            messageId,
-            conversation_id: processedMessage.conversation_id
-          });
-
-          // Não emitir whatsapp:message para mensagens enviadas - o endpoint /send já emitiu a temporária
-          // e o message_id foi atualizado em background
-
-          // Se tiver mídia, processa em background e atualiza depois
-          if (message.message) {
-            const messageTypeSaved = processedMessage.message_type;
-            if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
-                 MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
-              // Processa mídia em background para não bloquear
-              const { processMessageMedia } = await import('../services/mediaService.js');
-              processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
-                .then(async (publicUrl) => {
-                  // Atualiza a mensagem com a URL do Supabase
-                  const { createClient } = await import('@supabase/supabase-js');
-                  const supabaseClient = createClient(
-                    process.env.SUPABASE_URL,
-                    process.env.SUPABASE_SERVICE_KEY
-                  );
-
-                  const { error } = await supabaseClient
-                    .from('messages')
-                    .update({ content: publicUrl })
-                    .eq('message_id', processedMessage.message_id);
-
-                  if (error) {
-                    logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
-                  } else {
-                    // Emitir evento de atualização de mensagem quando a mídia for processada
-                    if (io) {
-                      io.emit('whatsapp:message_updated', {
-                        conversation_id: processedMessage.conversation_id,
-                        message_id: processedMessage.message_id,
-                        content: publicUrl
-                      });
-                    }
-                  }
-                })
-                .catch(error => {
-                  logger.error('Erro ao processar mídia:', error);
-                });
-              }
-            }
-          }
-      } else if (!isFromMe) {
-        // Mensagem recebida - processa imediatamente
+      // Mensagem recebida - processa imediatamente
+      if (!isFromMe) {
         logger.info('📨 Mensagem recebida (não é fromMe), chamando handleIncomingMessage:', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid,
