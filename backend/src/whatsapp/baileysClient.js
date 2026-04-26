@@ -582,8 +582,8 @@ function setupEvents(socket) {
         remoteJid: message.key?.remoteJid 
       });
 
-      if (isFromMe && (type === 'append' || type === 'notify')) {
-        // Mensagem enviada por nós - processa imediatamente
+      if (isFromMe && type === 'append') {
+        // Mensagem enviada por nós - processa apenas em append (notify causa duplicação)
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(
           process.env.SUPABASE_URL,
@@ -818,13 +818,28 @@ function setupEvents(socket) {
 
   // Evento de atualização de presença
   socket.ev.on('presence.update', async (updates) => {
-    // Verificar se updates é iterável
-    if (!updates || !Array.isArray(updates)) {
-      logger.warn('presence.update recebido com formato inválido:', typeof updates);
+    logger.info('📍 presence.update recebido:', { type: typeof updates, updates });
+
+    // O formato pode ser: { id: string, presences: { [jid]: { lastKnownPresence: string } } }
+    // ou array de objetos com mesmo formato
+    let updatesArray = [];
+
+    if (!updates) {
+      logger.warn('presence.update recebido sem dados');
       return;
     }
 
-    for (const { id, presences } of updates) {
+    if (Array.isArray(updates)) {
+      updatesArray = updates;
+    } else if (typeof updates === 'object' && updates.id && updates.presences) {
+      // Formato de objeto único
+      updatesArray = [updates];
+    } else {
+      logger.warn('presence.update com formato desconhecido:', typeof updates);
+      return;
+    }
+
+    for (const { id, presences } of updatesArray) {
       const phone = id.split('@')[0]; // Extrair phone do JID
 
       for (const [jid, presence] of Object.entries(presences)) {
