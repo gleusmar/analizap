@@ -133,6 +133,19 @@ export const conversationsAPI = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('caption', caption);
+    console.log('📤 Enviando anexo:', {
+      conversationId,
+      hasFile: !!file,
+      fileName: file?.name,
+      fileSize: file?.size,
+      fileType: file?.type,
+      caption,
+      formDataKeys: Array.from(formData.keys()),
+      formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
+        key,
+        value: value instanceof File ? `File: ${value.name} (${value.size} bytes)` : value
+      }))
+    });
     // Não especificar Content-Type manualmente - o axios define automaticamente com o boundary correto
     return api.post(`/conversations/${conversationId}/attachment`, formData);
   },
