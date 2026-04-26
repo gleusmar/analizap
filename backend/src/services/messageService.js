@@ -1144,6 +1144,9 @@ export async function openConversation(conversationId, sock = null) {
       throw error;
     }
 
+    // Zerar contador de mensagens não lidas ao abrir a conversa
+    await markMessagesAsRead(conversationId);
+
     // Buscar informações da conversa
     const { data: conversation } = await supabase
       .from('conversations')
