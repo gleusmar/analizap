@@ -141,12 +141,24 @@ function Chat() {
     }
   }, [selectedConversation?.id, refreshMessages]);
 
-  // Callback para atualização de mensagem (quando mídia é processada)
-  const handleMessageUpdated = useCallback((conversationId, messageId, content) => {
-    console.log('Mensagem atualizada (mídia processada):', { conversationId, messageId, content });
+  // Callback para atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
+  const handleMessageUpdated = useCallback((conversationId, messageId, content, tempMessageId, realMessageId) => {
+    console.log('Mensagem atualizada:', { conversationId, messageId, content, tempMessageId, realMessageId });
+
+    // Se tiver temp_message_id, remover mensagem otimista correspondente
+    if (tempMessageId) {
+      setOptimisticMessages(prev => {
+        const convMessages = prev[conversationId] || [];
+        const filtered = convMessages.filter(m => m.message_id !== tempMessageId);
+        return {
+          ...prev,
+          [conversationId]: filtered
+        };
+      });
+    }
 
     if (conversationId === selectedConversation?.id) {
-      // Invalidar cache e recarregar para mostrar a imagem processada
+      // Invalidar cache e recarregar para mostrar a mensagem atualizada
       const cacheKey = `messages_${conversationId}`;
       localStorage.removeItem(cacheKey);
       localStorage.removeItem(`${cacheKey}_time`);

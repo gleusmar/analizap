@@ -297,8 +297,16 @@ export async function sendMessage(req, res) {
           logger.error('Erro ao atualizar real_message_id:', updateError);
         } else {
           logger.info('real_message_id atualizado em background:', sentMessage.key.id);
-          // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
-          // e pode usar o real_message_id para atualizar o status quando necessário
+
+          // Emitir evento para o frontend para atualizar/remover mensagem temporária
+          const io = getIO();
+          if (io) {
+            io.emit('whatsapp:message_updated', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id
+            });
+          }
         }
       })
       .catch(error => {
@@ -619,11 +627,21 @@ export async function sendAttachment(req, res) {
       .from('messages')
       .update({ real_message_id: sentMessage.key.id, is_delivered: true, delivery_error: null })
       .eq('id', savedMessage.id)
-      .then(({ error }) => {
+      .then(async ({ error }) => {
         if (error) {
           logger.error('Erro ao atualizar real_message_id:', error);
         } else {
           logger.info('real_message_id atualizado para anexo:', sentMessage.key.id);
+
+          // Emitir evento para o frontend para atualizar/remover mensagem temporária
+          const io = getIO();
+          if (io) {
+            io.emit('whatsapp:message_updated', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id
+            });
+          }
         }
       })
       .catch(error => {
