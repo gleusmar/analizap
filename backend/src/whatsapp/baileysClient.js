@@ -1142,11 +1142,23 @@ async function processMessageBatch() {
       const messageTime = message.messageTimestamp * 1000;
       const isRecent = Date.now() - messageTime < 5 * 60 * 1000;
 
+      logger.info('📤 Verificando se deve emitir whatsapp:message:', {
+        messageId,
+        conversation_id: processedMessage.conversation_id,
+        messageTime: new Date(messageTime).toISOString(),
+        isRecent,
+        hasIo: !!io
+      });
+
       if (isRecent && io) {
+        logger.info('📤 Emitindo whatsapp:message para conversa:', processedMessage.conversation_id);
         io.emit('whatsapp:message', {
           conversation_id: processedMessage.conversation_id,
           message: processedMessage
         });
+        logger.info('✅ Evento whatsapp:message emitido com sucesso');
+      } else {
+        logger.warn('⚠️ Não emitindo whatsapp:message:', { isRecent, hasIo });
       }
 
       // Delay entre mensagens para não sobrecarregar o Supabase
@@ -1372,11 +1384,16 @@ async function handleIncomingMessage(message, shouldProcess = true) {
 
         // Emitir evento atualizado com a mensagem salva
         if (io) {
+          logger.info('📤 Emitindo whatsapp:message (não batch):', {
+            conversation_id: savedMessage.conversation_id,
+            message_id: savedMessage.message_id
+          });
           io.emit('whatsapp:message', {
             conversation_id: savedMessage.conversation_id,
             message: savedMessage,
             is_temp: false
           });
+          logger.info('✅ Evento whatsapp:message (não batch) emitido com sucesso');
         }
 
         // Se tiver mídia, processa em background
