@@ -858,21 +858,33 @@ function setupEvents(socket) {
         await processSentMessage(message, syncPeriodDays);
         return;
       }
-      // Mensagem recebida com notify - processar sempre (mesmo sem conteúdo)
+      // Mensagem recebida com notify - verificar duplicação antes de processar
       else if (!isFromMe && type === 'notify') {
         const hasContent = message.message && Object.keys(message.message).length > 0;
-        if (!hasContent) {
+        
+        // Se tiver conteúdo, verificar se já foi processada anteriormente
+        if (hasContent) {
+          const alreadyExists = await checkMessageExists(uniqueId);
+          if (alreadyExists) {
+            logger.info('⏭️ Mensagem recebida com notify já processada anteriormente, ignorando:', {
+              messageId: message.key?.id,
+              uniqueId
+            });
+          } else {
+            logger.info('📨 Mensagem recebida com notify e conteúdo, processando:', {
+              messageId: message.key?.id,
+              remoteJid: message.key?.remoteJid
+            });
+            await handleIncomingMessage(message, true); // true = processar
+          }
+        } else {
+          // Sem conteúdo - processar mesmo assim (pode ser append depois)
           logger.warn('📨 Mensagem recebida com notify sem conteúdo, processando mesmo assim:', {
             messageId: message.key?.id,
             remoteJid: message.key?.remoteJid
           });
-        } else {
-          logger.info('📨 Mensagem recebida com notify e conteúdo, processando:', {
-            messageId: message.key?.id,
-            remoteJid: message.key?.remoteJid
-          });
+          await handleIncomingMessage(message, true); // true = processar
         }
-        await handleIncomingMessage(message, true); // true = processar
       } else if (!isFromMe && type === 'append') {
         // Mensagem recebida com append - verificar se já foi processada pelo notify
         // Se foi processada pelo notify, ignorar o append para evitar duplicação
