@@ -748,7 +748,13 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         mimetype: msg.imageMessage.mimetype,
         width: msg.imageMessage.width,
         height: msg.imageMessage.height,
-        fileLength: msg.imageMessage.fileLength
+        fileLength: msg.imageMessage.fileLength,
+        thumbnail: msg.imageMessage.jpegThumbnail ? `data:image/jpeg;base64,${msg.imageMessage.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: msg.imageMessage.fileSha256,
+        fileEncSha256: msg.imageMessage.fileEncSha256,
+        mediaKey: msg.imageMessage.mediaKey,
+        mediaKeyTimestamp: msg.imageMessage.mediaKeyTimestamp,
+        directPath: msg.imageMessage.directPath
       };
       logger.info('📷 Imagem detectada, metadados:', metadata);
     }
@@ -774,7 +780,12 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         width: msg.videoMessage.width,
         height: msg.videoMessage.height,
         fileLength: msg.videoMessage.fileLength,
-        thumbnail: msg.videoMessage.jpegThumbnail ? `data:image/jpeg;base64,${msg.videoMessage.jpegThumbnail.toString('base64')}` : null
+        thumbnail: msg.videoMessage.jpegThumbnail ? `data:image/jpeg;base64,${msg.videoMessage.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: msg.videoMessage.fileSha256,
+        fileEncSha256: msg.videoMessage.fileEncSha256,
+        mediaKey: msg.videoMessage.mediaKey,
+        mediaKeyTimestamp: msg.videoMessage.mediaKeyTimestamp,
+        directPath: msg.videoMessage.directPath
       };
       logger.info('🎬 Vídeo detectado, metadados:', {
         caption: metadata.caption,
@@ -791,7 +802,13 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         filename: msg.documentMessage.fileName,
         mimetype: msg.documentMessage.mimetype,
         fileLength: msg.documentMessage.fileLength,
-        pageCount: msg.documentMessage.pageCount
+        pageCount: msg.documentMessage.pageCount,
+        thumbnail: msg.documentMessage.jpegThumbnail ? `data:image/jpeg;base64,${msg.documentMessage.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: msg.documentMessage.fileSha256,
+        fileEncSha256: msg.documentMessage.fileEncSha256,
+        mediaKey: msg.documentMessage.mediaKey,
+        mediaKeyTimestamp: msg.documentMessage.mediaKeyTimestamp,
+        directPath: msg.documentMessage.directPath
       };
     }
     // Localização
@@ -1318,15 +1335,71 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         quotedMessageType: quoted.message_type
       });
 
-      // Configurar quoted message - usar apenas a key sem o message
-      // O WhatsApp buscará automaticamente a mensagem original dos servidores
+      // Configurar quoted message - reconstruir o objeto de mensagem completo
+      // Segundo a documentação do Baileys, é necessário passar o objeto WAMessage original
+      let quotedMessageContent = {};
+
+      switch (quoted.message_type) {
+        case MESSAGE_TYPES.TEXT:
+          quotedMessageContent = { conversation: quoted.content };
+          break;
+        case MESSAGE_TYPES.IMAGE:
+          quotedMessageContent = {
+            imageMessage: {
+              url: quoted.content,
+              caption: quoted.metadata?.caption || '',
+              mimetype: quoted.metadata?.mimetype || 'image/jpeg',
+              jpegThumbnail: quoted.metadata?.thumbnail,
+              fileSha256: quoted.metadata?.fileSha256,
+              fileEncSha256: quoted.metadata?.fileEncSha256,
+              mediaKey: quoted.metadata?.mediaKey,
+              mediaKeyTimestamp: quoted.metadata?.mediaKeyTimestamp,
+              directPath: quoted.metadata?.directPath
+            }
+          };
+          break;
+        case MESSAGE_TYPES.AUDIO:
+          quotedMessageContent = {
+            audioMessage: {
+              url: quoted.content,
+              mimetype: quoted.metadata?.mimetype || 'audio/mpeg',
+              seconds: quoted.metadata?.duration
+            }
+          };
+          break;
+        case MESSAGE_TYPES.VIDEO:
+          quotedMessageContent = {
+            videoMessage: {
+              url: quoted.content,
+              caption: quoted.metadata?.caption || '',
+              mimetype: quoted.metadata?.mimetype || 'video/mp4',
+              jpegThumbnail: quoted.metadata?.thumbnail,
+              seconds: quoted.metadata?.duration
+            }
+          };
+          break;
+        case MESSAGE_TYPES.DOCUMENT:
+          quotedMessageContent = {
+            documentMessage: {
+              url: quoted.content,
+              fileName: quoted.metadata?.filename || 'document',
+              mimetype: quoted.metadata?.mimetype || 'application/octet-stream',
+              jpegThumbnail: quoted.metadata?.thumbnail
+            }
+          };
+          break;
+        default:
+          quotedMessageContent = { conversation: quoted.content || '' };
+      }
+
       messageOptions.quoted = {
         key: {
           remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
           id: quotedMessageId,
           fromMe: quoted.key?.fromMe ?? quoted.from_me,
           participant: undefined // null para 1:1 chats
-        }
+        },
+        message: quotedMessageContent
       };
     }
 
