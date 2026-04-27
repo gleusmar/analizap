@@ -566,8 +566,9 @@ function setupEvents(socket) {
     const messageId = message.key.id;
     const remoteJid = message.key.remoteJid;
     const messageTimestamp = message.messageTimestamp;
+    const uniqueId = getMessageUniqueId(message);
 
-    logger.info('Processando mensagem enviada por nós:', { messageId });
+    logger.info('Processando mensagem enviada por nós:', { messageId, uniqueId });
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
@@ -595,6 +596,7 @@ function setupEvents(socket) {
     if (existingMessage) {
       logger.info('Mensagem já existe (message_id ou real_message_id), atualizando status:', {
         messageId,
+        uniqueId,
         existingMessageId: existingMessage.id,
         existingMessageId: existingMessage.message_id,
         existingRealMessageId: existingMessage.real_message_id
@@ -841,25 +843,19 @@ function setupEvents(socket) {
     // Se é mensagem individual recente, processa imediatamente
     for (const message of messages) {
       const isFromMe = message.key.fromMe;
+      const uniqueId = getMessageUniqueId(message);
       logger.info('🔍 Processando mensagem individual:', {
         messageId: message.key?.id,
+        uniqueId,
         isFromMe,
         type,
         remoteJid: message.key?.remoteJid
       });
 
-      if (isFromMe && type === 'append') {
-        // Mensagem enviada por nós - processa apenas em append (notify causa duplicação)
+      if (isFromMe) {
+        // Mensagem enviada por nós - processar sempre (notify e append)
+        // A função processSentMessage já verifica duplicação internamente
         await processSentMessage(message, syncPeriodDays);
-        return;
-      }
-
-      // Mensagem enviada por nós com notify - IGNORAR (vai ser processada em append)
-      if (isFromMe && type === 'notify') {
-        logger.info('📤 Mensagem enviada por nós com notify, ignorando (vai ser processada em append):', {
-          messageId: message.key?.id,
-          remoteJid: message.key?.remoteJid
-        });
         return;
       }
       // Mensagem recebida com notify - processar sempre (mesmo sem conteúdo)
@@ -1191,6 +1187,7 @@ async function processMessageBatch() {
     for (const msg of batchToProcess) {
       const message = msg.message;
       const remoteJid = message.key.remoteJid;
+      const type = msg.type;
 
       // Ignorar mensagens de grupo, status, newsletter e canais
       if (isGroupOrBroadcast(remoteJid)) {
@@ -1198,15 +1195,24 @@ async function processMessageBatch() {
       }
 
       const messageId = message.key.id;
+      const uniqueId = getMessageUniqueId(message);
 
-      // Verificar se mensagem já existe
-      const { data: existingMessage } = await supabase
-        .from('messages')
-        .select('id')
-        .eq('message_id', messageId)
-        .single();
+      // Para append, verificar se mensagem já existe (notify é sempre nova)
+      if (type === 'append') {
+        const { data: existingMessage } = await supabase
+          .from('messages')
+          .select('id')
+          .eq('message_id', messageId)
+          .single();
 
-      if (existingMessage) continue;
+        if (existingMessage) {
+          logger.info('Mensagem append já existe, ignorando:', { messageId, uniqueId });
+          continue;
+        }
+      }
+
+      // Para notify, processar sempre (é mensagem nova em tempo real)
+      logger.info('Processando mensagem no batch:', { messageId, uniqueId, type });
 
       // Processar mensagem (processWhatsAppMessage vai criar a conversa se necessário)
       const { processWhatsAppMessage } = await import('../services/messageService.js');
@@ -1310,6 +1316,14 @@ function emitConnectionStatus(status) {
   if (io) {
     io.emit('whatsapp:status', { status, sessionId });
   }
+}
+
+/**
+ * Gera ID único da mensagem baseado na chave do WhatsApp
+ * Combina remoteJid, fromMe e id para garantir unicidade
+ */
+function getMessageUniqueId(msg) {
+  return `${msg.key?.remoteJid || ''}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
 }
 
 /**

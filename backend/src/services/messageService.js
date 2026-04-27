@@ -523,18 +523,6 @@ export async function saveMessage(messageData) {
       }
     }
 
-    // Verificar se a mensagem já existe para evitar duplicação (JID/LID)
-    const { data: existingMessage } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('message_id', message_id)
-      .single();
-
-    if (existingMessage) {
-      logger.info('Mensagem já existe no banco, ignorando duplicação:', { message_id });
-      return existingMessage;
-    }
-
     const { data: message, error } = await supabase
       .from('messages')
       .insert({
