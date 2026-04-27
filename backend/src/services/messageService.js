@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import { unlink } from 'fs/promises';
 import { getIO } from '../sockets/socket.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1318,6 +1319,7 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       });
 
       // Reconstruir quoted.message no formato do Baileys
+      // Para imagens, usar texto simples no preview para garantir que funcione
       let quotedMessageContent = {};
       switch (quoted.message_type) {
         case MESSAGE_TYPES.TEXT:
@@ -1325,37 +1327,27 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
           break;
         case MESSAGE_TYPES.IMAGE:
           quotedMessageContent = {
-            imageMessage: {
-              url: quoted.content,
-              caption: quoted.metadata?.caption || '',
-              mimetype: quoted.metadata?.mimetype || 'image/jpeg'
-            }
+            conversation: quoted.metadata?.caption || '📷 Imagem'
           };
           break;
         case MESSAGE_TYPES.AUDIO:
           quotedMessageContent = {
-            audioMessage: {
-              url: quoted.content,
-              mimetype: quoted.metadata?.mimetype || 'audio/mpeg'
-            }
+            conversation: '🎵 Áudio'
           };
           break;
         case MESSAGE_TYPES.VIDEO:
           quotedMessageContent = {
-            videoMessage: {
-              url: quoted.content,
-              caption: quoted.metadata?.caption || '',
-              mimetype: quoted.metadata?.mimetype || 'video/mp4'
-            }
+            conversation: quoted.metadata?.caption || '🎥 Vídeo'
           };
           break;
         case MESSAGE_TYPES.DOCUMENT:
           quotedMessageContent = {
-            documentMessage: {
-              url: quoted.content,
-              fileName: quoted.metadata?.filename || 'document',
-              mimetype: quoted.metadata?.mimetype || 'application/octet-stream'
-            }
+            conversation: `📄 ${quoted.metadata?.filename || 'Documento'}`
+          };
+          break;
+        case MESSAGE_TYPES.LOCATION:
+          quotedMessageContent = {
+            conversation: '📍 Localização'
           };
           break;
         default:
@@ -1565,14 +1557,15 @@ export async function forwardWhatsAppMessage(sock, fromConversationId, toConvers
 
     logger.info('Mensagem encaminhada:', { fromConversationId, toConversationId, messageId });
 
-    // Gerar temp_message_id
+    // Gerar UUID válido para o id e temp_message_id
+    const messageIdUuid = uuidv4();
     const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // Salvar mensagem no banco
     const { data: savedMessage, error: saveError } = await supabase
       .from('messages')
       .insert({
-        id: tempMessageId,
+        id: messageIdUuid,
         conversation_id: toConversationId,
         message_id: tempMessageId,
         content: message.content,
@@ -1595,7 +1588,7 @@ export async function forwardWhatsAppMessage(sock, fromConversationId, toConvers
           await supabase
             .from('messages')
             .update({ real_message_id: realMessageId })
-            .eq('id', tempMessageId);
+            .eq('id', messageIdUuid);
           logger.info('real_message_id atualizado para mensagem encaminhada:', realMessageId);
         }, 1000);
       }
