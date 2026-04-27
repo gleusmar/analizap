@@ -162,15 +162,6 @@ export async function fetchProfilePicture(sock, jid) {
 export async function getOrCreateConversation(jid, contactName = null, profilePictureUrl = null, lid = null, sock = null, messageTimestamp = null) {
   let phone = extractPhoneFromJid(jid);
 
-  logger.debug('getOrCreateConversation chamada', {
-    jid,
-    lid,
-    phone,
-    contactName,
-    messageTimestamp,
-    syncPeriodDays
-  });
-
   try {
     // Se o jid for um LID, tenta obter o JID mapeado
     let originalLid = lid; // Usa o parâmetro lid se fornecido
@@ -178,7 +169,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       originalLid = jid;
       const mappedJid = await getJidFromLid(jid);
       if (mappedJid) {
-        logger.debug('LID mapeado para JID', { lid: jid, mappedJid });
         jid = mappedJid;
         phone = extractPhoneFromJid(jid);
       } else {
@@ -199,15 +189,8 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .eq('phone', phone)
       .single();
 
-    logger.debug('Busca de conversa existente', {
-      phone,
-      found: !!existingConversation,
-      error: findError?.message
-    });
-
     // Se não encontrou pelo phone atual e temos um LID associado, tenta buscar conversa pelo LID
     if (!existingConversation && originalLid) {
-      logger.debug('Tentando buscar conversa pelo LID', { originalLid });
 
       const { data: lidConversation, error: lidFindError } = await supabase
         .from('conversations')
@@ -244,11 +227,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       if (mappedJid) {
         const mappedPhone = extractPhoneFromJid(mappedJid);
         if (mappedPhone && mappedPhone !== phone) {
-          logger.debug('Tentando buscar conversa pelo phone do JID mapeado', {
-            originalLid,
-            mappedPhone
-          });
-
           const { data: conversationByMappedPhone, error: mappedFindError } = await supabase
             .from('conversations')
             .select('*')
@@ -298,12 +276,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 
       // Se a conversa foi criada com LID e agora temos o phone correto (do JID), atualiza o phone
       if (existingConversation.phone.endsWith('@lid') && phone && !phone.endsWith('@lid') && existingConversation.phone !== phone) {
-        logger.debug('Atualizando phone da conversa (de LID para phone real)', {
-          conversationId: existingConversation.id,
-          oldPhone: existingConversation.phone,
-          newPhone: phone
-        });
-
         const { error: phoneUpdateError } = await supabase
           .from('conversations')
           .update({ phone: phone })
@@ -319,12 +291,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       // Atualiza o nome se um novo pushName foi fornecido e for diferente do atual
       // Prioridade: contactName (pushName) > nome atual
       if (contactName && contactName !== existingConversation.contact_name && contactName !== phone) {
-        logger.debug('Atualizando nome da conversa', {
-          conversationId: existingConversation.id,
-          oldName: existingConversation.contact_name,
-          newName: contactName
-        });
-
         const { error: nameUpdateError } = await supabase
           .from('conversations')
           .update({ contact_name: contactName })
@@ -358,15 +324,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
 
-      logger.debug('Verificando período de sincronização', {
-        messageDate: messageDate.toISOString(),
-        cutoffDate: cutoffDate.toISOString(),
-        syncPeriodDays,
-        isOld: messageDate < cutoffDate
-      });
-
       if (messageDate < cutoffDate) {
-        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), não cria nova conversa (período: ${syncPeriodDays} dias)`);
         // Retorna null para indicar que não deve criar nova conversa
         return null;
       }
@@ -377,8 +335,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       profilePictureUrl = await fetchProfilePicture(sock, jid);
     }
 
-    // Cria nova conversa
-    logger.debug('Criando nova conversa', { phone, contactName });
     // Usa messageTimestamp para last_message_at se disponível, senão data atual
     const lastMessageAt = messageTimestamp
       ? new Date(messageTimestamp * 1000).toISOString()
@@ -565,13 +521,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     const remoteJid = key.remoteJid;
     const fromMe = key.fromMe;
 
-    logger.info('processWhatsAppMessage chamado:', {
-      messageId: key?.id,
-      fromMe,
-      remoteJid,
-      hasContent: !!msg
-    });
-
     // Verifica se msg existe
     if (!msg) {
       logger.warn('Mensagem sem conteúdo, ignorando');
@@ -585,13 +534,11 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       remoteJid.endsWith('@newsletter') ||
       (remoteJid.endsWith('@s.whatsapp.net') && remoteJid.includes('status'))
     ) {
-      logger.info('🚫 Mensagem de grupo/broadcast/newsletter/status ignorada:', remoteJid);
       return null;
     }
 
     // Ignorar mensagens de protocolo (confirmações, atualizações de status, etc.)
     if (msg.protocolMessage) {
-      logger.debug('Mensagem de protocolo ignorada');
       return null;
     }
 
@@ -621,20 +568,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - syncPeriodDays);
 
-      logger.debug('Verificando período de sincronização em processWhatsAppMessage', {
-        messageDate: messageDate.toISOString(),
-        cutoffDate: cutoffDate.toISOString(),
-        syncPeriodDays,
-        isOld: messageDate < cutoffDate,
-        messageType: msg.imageMessage ? 'image' :
-                    msg.audioMessage ? 'audio' :
-                    msg.videoMessage ? 'video' :
-                    msg.documentMessage ? 'document' :
-                    msg.conversation ? 'text' : 'unknown'
-      });
-
       if (messageDate < cutoffDate) {
-        logger.debug(`Mensagem antiga (${messageDate.toISOString()}), ignorando (período: ${syncPeriodDays} dias)`);
         return null;
       }
     }
@@ -660,7 +594,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     // Salva mapeamento se tiver ambos LID e JID
     if (lid && jid && jid.endsWith('@s.whatsapp.net')) {
       const phone = extractPhoneFromJid(jid);
-      logger.debug('Condição para saveLidMapping atendida', { lid, jid, phone });
       await saveLidMapping(lid, jid, phone);
 
       // Após salvar o mapeamento, verificar se existe uma conversa criada com o LID como phone
@@ -690,10 +623,7 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         }
       } catch (e) {
         // Nenhuma conversa com LID encontrada, continua normalmente
-        logger.debug('Nenhuma conversa com LID encontrada para atualizar');
       }
-    } else {
-      logger.debug('Condição para saveLidMapping NÃO atendida', { lid, jid, hasLid: !!lid, hasJid: !!jid, isJidValid: jid?.endsWith('@s.whatsapp.net') });
     }
 
     // Determina o identificador principal para usar na conversa
@@ -703,12 +633,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     // Obtém ou cria conversa
     // Prioridade: pushName (nome definido pelo usuário no WhatsApp) > phone
     const contactName = pushName || null;
-
-    logger.debug('Nomes disponíveis para conversa', {
-      phone,
-      pushName,
-      contactName
-    });
 
     const conversation = await getOrCreateConversation(
       primaryIdentifier,
@@ -721,7 +645,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
 
     // Se a conversa não foi criada (mensagem antiga), retorna null
     if (!conversation) {
-      logger.debug('Conversa não criada/atualizada (mensagem antiga)');
       return null;
     }
 
