@@ -527,7 +527,9 @@ function setupEvents(socket) {
         }
       }
     } else if (connection === 'open') {
-      logger.info('🟢🟢🟢 Conexão aberta com sucesso - Sistema pronto para receber mensagens');
+      logger.info('🟢🟢🟢🟢🟢 CONEXÃO ABERTA - SISTEMA PRONTO PARA RECEBER MENSAGENS', {
+        timestamp: new Date().toISOString()
+      });
       connectionStatus = 'connected';
       qrCode = null;
       reconnectAttempts = 0; // Reset contador de tentativas
@@ -727,13 +729,17 @@ function setupEvents(socket) {
   // Evento de atualização de mensagens
   logger.info('📝 Registrando evento messages.upsert...');
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.info('📨📨📨 Evento messages.upsert recebido:', {
+    logger.info('📨📨📨📨📨 EVENTO MESSAGES.UPSERT RECEBIDO:', {
       messageCount: messages.length,
       type,
-      firstMessageId: messages[0]?.key?.id,
-      firstMessageRemoteJid: messages[0]?.key?.remoteJid,
-      firstMessageFromMe: messages[0]?.key?.fromMe,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      messages: messages.map(m => ({
+        id: m.key?.id,
+        remoteJid: m.key?.remoteJid,
+        fromMe: m.key?.fromMe,
+        hasMessage: !!m.message,
+        messageKeys: m.message ? Object.keys(m.message) : []
+      }))
     });
 
     // Se é histórico (append), usa batching

@@ -1502,14 +1502,79 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
     const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
     logger.info('Mensagem enviada para o WhatsApp com sucesso:', sentMessage.key?.id);
 
-    // Adicionar informações de tipo e conteúdo ao resultado
-    sentMessage.messageType = messageType;
-    sentMessage.content = ''; // Será atualizado após upload para Supabase
-    sentMessage.metadata = {
+    // Extrair metadados completos da resposta do WhatsApp para citação
+    let completeMetadata = {
       caption: caption || '',
       mimetype: mimeType,
       filename: file.originalname
     };
+
+    // Extrair metadados específicos do tipo de mensagem
+    if (sentMessage.message?.imageMessage) {
+      const imgMsg = sentMessage.message.imageMessage;
+      completeMetadata = {
+        ...completeMetadata,
+        thumbnail: imgMsg.jpegThumbnail ? `data:image/jpeg;base64,${imgMsg.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: imgMsg.fileSha256,
+        fileEncSha256: imgMsg.fileEncSha256,
+        mediaKey: imgMsg.mediaKey,
+        mediaKeyTimestamp: imgMsg.mediaKeyTimestamp,
+        directPath: imgMsg.directPath,
+        width: imgMsg.width,
+        height: imgMsg.height,
+        fileLength: imgMsg.fileLength
+      };
+      logger.info('Metadados de imagem extraídos:', {
+        hasThumbnail: !!completeMetadata.thumbnail,
+        hasFileSha256: !!completeMetadata.fileSha256,
+        hasMediaKey: !!completeMetadata.mediaKey
+      });
+    } else if (sentMessage.message?.videoMessage) {
+      const vidMsg = sentMessage.message.videoMessage;
+      completeMetadata = {
+        ...completeMetadata,
+        thumbnail: vidMsg.jpegThumbnail ? `data:image/jpeg;base64,${vidMsg.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: vidMsg.fileSha256,
+        fileEncSha256: vidMsg.fileEncSha256,
+        mediaKey: vidMsg.mediaKey,
+        mediaKeyTimestamp: vidMsg.mediaKeyTimestamp,
+        directPath: vidMsg.directPath,
+        width: vidMsg.width,
+        height: vidMsg.height,
+        fileLength: vidMsg.fileLength,
+        seconds: vidMsg.seconds
+      };
+    } else if (sentMessage.message?.documentMessage) {
+      const docMsg = sentMessage.message.documentMessage;
+      completeMetadata = {
+        ...completeMetadata,
+        thumbnail: docMsg.jpegThumbnail ? `data:image/jpeg;base64,${docMsg.jpegThumbnail.toString('base64')}` : null,
+        fileSha256: docMsg.fileSha256,
+        fileEncSha256: docMsg.fileEncSha256,
+        mediaKey: docMsg.mediaKey,
+        mediaKeyTimestamp: docMsg.mediaKeyTimestamp,
+        directPath: docMsg.directPath,
+        fileLength: docMsg.fileLength,
+        pageCount: docMsg.pageCount
+      };
+    } else if (sentMessage.message?.audioMessage) {
+      const audMsg = sentMessage.message.audioMessage;
+      completeMetadata = {
+        ...completeMetadata,
+        fileSha256: audMsg.fileSha256,
+        fileEncSha256: audMsg.fileEncSha256,
+        mediaKey: audMsg.mediaKey,
+        mediaKeyTimestamp: audMsg.mediaKeyTimestamp,
+        directPath: audMsg.directPath,
+        fileLength: audMsg.fileLength,
+        seconds: audMsg.seconds
+      };
+    }
+
+    // Adicionar informações de tipo e conteúdo ao resultado
+    sentMessage.messageType = messageType;
+    sentMessage.content = ''; // Será atualizado após upload para Supabase
+    sentMessage.metadata = completeMetadata;
 
     return sentMessage;
   } catch (error) {
