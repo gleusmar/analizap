@@ -326,17 +326,14 @@ export async function sendMessage(req, res) {
           }
         }
       })
-      .catch(async error => {
+      .catch(error => {
         logger.error('Erro ao enviar mensagem para WhatsApp:', error);
         // Marcar mensagem como falha
-        const { error: updateError } = await supabase
+        supabase
           .from('messages')
           .update({ delivery_error: error.message || 'Erro ao enviar mensagem' })
-          .eq('id', savedMessage.id);
-        
-        if (updateError) {
-          logger.error('Erro ao marcar mensagem como falha:', updateError);
-        }
+          .eq('id', savedMessage.id)
+          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
       });
 
     // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos

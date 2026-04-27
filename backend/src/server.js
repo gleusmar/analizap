@@ -34,7 +34,7 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL?.split(',') || ['http://localhost:5173', 'https://analizap.vercel.app'],
+  origin: process.env.FRONTEND_URL?.split(',') || ['http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json());

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { connectionAPI } from '../services/api';
 
@@ -10,18 +10,6 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
   const [phoneNumber, setPhoneNumber] = useState(null);
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-
-  // Refs para armazenar os callbacks atualizados
-  const onMessageReceivedRef = useRef(onMessageReceived);
-  const onMessageStatusUpdateRef = useRef(onMessageStatusUpdate);
-  const onMessageUpdatedRef = useRef(onMessageUpdated);
-
-  // Atualizar refs quando os callbacks mudam
-  useEffect(() => {
-    onMessageReceivedRef.current = onMessageReceived;
-    onMessageStatusUpdateRef.current = onMessageStatusUpdate;
-    onMessageUpdatedRef.current = onMessageUpdated;
-  }, [onMessageReceived, onMessageStatusUpdate, onMessageUpdated]);
 
   // Conecta ao Socket.io
   useEffect(() => {
@@ -58,33 +46,33 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
 
     // Evento de nova mensagem
     socketInstance.on('whatsapp:message', ({ conversation_id, message, is_temp }) => {
-      if (onMessageReceivedRef.current) {
-        onMessageReceivedRef.current(conversation_id, message, is_temp || false);
+      if (onMessageReceived) {
+        onMessageReceived(conversation_id, message, is_temp || false);
       }
     });
 
     // Evento de atualização de status de mensagem
     socketInstance.on('whatsapp:message_status', ({ message_id, status }) => {
       console.log('Status de mensagem atualizado:', message_id, status);
-      if (onMessageStatusUpdateRef.current) {
-        onMessageStatusUpdateRef.current(message_id, status);
+      if (onMessageStatusUpdate) {
+        onMessageStatusUpdate(message_id, status);
       }
     });
 
     // Evento de atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
     socketInstance.on('whatsapp:message_updated', ({ conversation_id, message_id, content, temp_message_id, real_message_id, message }) => {
       console.log('Mensagem atualizada:', { conversation_id, message_id, content, temp_message_id, real_message_id, message });
-      if (onMessageUpdatedRef.current) {
-        onMessageUpdatedRef.current(conversation_id, message_id, content, temp_message_id, real_message_id, message);
+      if (onMessageUpdated) {
+        onMessageUpdated(conversation_id, message_id, content, temp_message_id, real_message_id, message);
       }
     });
 
     // Evento de falha na entrega de mensagem
     socketInstance.on('whatsapp:message_failed', ({ conversation_id, message_id, error }) => {
       console.log('Falha na entrega de mensagem:', { conversation_id, message_id, error });
-      if (onMessageReceivedRef.current) {
+      if (onMessageReceived) {
         // Recarregar mensagens para mostrar o erro
-        onMessageReceivedRef.current(conversation_id, null, false);
+        onMessageReceived(conversation_id, null, false);
       }
     });
 
@@ -93,7 +81,7 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     return () => {
       socketInstance.disconnect();
     };
-  }, []); // Sem dependências - conecta apenas uma vez
+  }, [onMessageReceived, onMessageStatusUpdate, onMessageUpdated]);
 
   // Carrega status inicial
   useEffect(() => {

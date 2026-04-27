@@ -15,6 +15,7 @@ import {
   updateMessageStatus,
   getPrimaryIdentifier,
   extractPhoneFromJid,
+  getJidFromLid,
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { processMessageMedia } from '../services/mediaService.js';
@@ -1358,27 +1359,38 @@ function emitConnectionStatus(status) {
 }
 
 /**
- * Gera ID único da mensagem baseado na chave do WhatsApp
- * Combina remoteJid, fromMe e id para garantir unicidade
- * Faz mapeamento LID->JID antes de gerar o ID para evitar duplicação
+ * Normaliza o remoteJid fazendo mapeamento LID->JID se necessário
+ * Isso garante que o unique_id seja consistente mesmo quando a mensagem
+ * chega primeiro com LID e depois com JID real
  */
-async function getMessageUniqueId(msg) {
-  let remoteJid = msg.key?.remoteJid || '';
+async function getNormalizedRemoteJid(remoteJid) {
+  if (!remoteJid) return '';
   
-  // Se o remoteJid for um LID, tentar mapear para o JID real
-  if (remoteJid.endsWith('@lid')) {
-    try {
-      const { getJidFromLid } = await import('../services/messageService.js');
-      const mappedJid = await getJidFromLid(remoteJid);
-      if (mappedJid) {
-        remoteJid = mappedJid;
-      }
-    } catch (error) {
-      // Se falhar o mapeamento, usa o LID mesmo
-    }
+  // Se já for um JID normal (não LID), retorna como está
+  if (!remoteJid.endsWith('@lid')) {
+    return remoteJid;
   }
   
-  return `${remoteJid}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
+  // Se for LID, tenta mapear para JID real
+  try {
+    const mappedJid = await getJidFromLid(remoteJid);
+    if (mappedJid) {
+      return mappedJid;
+    }
+  } catch (error) {
+    // Se falhar o mapeamento, usa o LID mesmo
+  }
+  
+  return remoteJid;
+}
+
+/**
+ * Gera ID único da mensagem baseado na chave do WhatsApp
+ * Combina remoteJid (normalizado), fromMe e id para garantir unicidade
+ */
+async function getMessageUniqueId(msg) {
+  const normalizedRemoteJid = await getNormalizedRemoteJid(msg.key?.remoteJid);
+  return `${normalizedRemoteJid || ''}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
 }
 
 /**
