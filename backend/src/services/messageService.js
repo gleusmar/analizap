@@ -1573,7 +1573,8 @@ export async function forwardWhatsAppMessage(sock, fromConversationId, toConvers
         from_me: true,
         metadata: message.metadata || {},
         is_read: false,
-        is_delivered: false
+        is_delivered: false,
+        timestamp: new Date().toISOString()
       })
       .select()
       .single();
