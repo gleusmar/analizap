@@ -390,7 +390,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
 
     // Configuração do logger
     const loggerBaileys = pino({
-      level: 'info' // Mudar para info para ver mais detalhes
+      level: 'debug' // Mudar para debug para ver todos os eventos do Baileys
     });
 
     // Cria o socket com a versão mais recente
@@ -729,6 +729,20 @@ function setupEvents(socket) {
   // Evento de atualização de mensagens
   logger.info('📝 Registrando evento messages.upsert...');
 
+  // Adicionar listeners para todos os eventos do Baileys para debug
+  socket.ev.on('connection.update', (update) => {
+    logger.info('🔌 CONNECTION.UPDATE:', {
+      connection: update.connection,
+      qr: !!update.qr,
+      lastDisconnect: update.lastDisconnect?.error?.message,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('creds.update', () => {
+    logger.info('🔑 CREDS.UPDATE - Credenciais atualizadas');
+  });
+
   // Adicionar listener para messages.update (para debug)
   socket.ev.on('messages.update', (updates) => {
     logger.info('📨📨 EVENTO MESSAGES.UPDATE RECEBIDO:', {
@@ -744,6 +758,48 @@ function setupEvents(socket) {
   // Adicionar listener para chat.update (para debug)
   socket.ev.on('chats.update', (updates) => {
     logger.info('💬 EVENTO CHATS.UPDATE RECEBIDO:', {
+      count: updates.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('chats.upsert', (chats) => {
+    logger.info('💬💬 EVENTO CHATS.UPSERT RECEBIDO:', {
+      count: chats.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('chats.delete', (chats) => {
+    logger.info('💬❌ EVENTO CHATS.DELETE RECEBIDO:', {
+      count: chats.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('messages.delete', (deletions) => {
+    logger.info('📨❌ EVENTO MESSAGES.DELETE RECEBIDO:', {
+      count: deletions.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('presence.update', (presences) => {
+    logger.info('👤 EVENTO PRESENCE.UPDATE RECEBIDO:', {
+      count: Object.keys(presences).length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('groups.upsert', (groups) => {
+    logger.info('👥 EVENTO GROUPS.UPSERT RECEBIDO:', {
+      count: groups.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  socket.ev.on('groups.update', (updates) => {
+    logger.info('👥 EVENTO GROUPS.UPDATE RECEBIDO:', {
       count: updates.length,
       timestamp: new Date().toISOString()
     });
