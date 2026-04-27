@@ -369,7 +369,8 @@ export async function sendMessage(req, res) {
     res.json({
       success: true,
       message: 'Mensagem enviada',
-      savedMessage
+      savedMessage,
+      temp_message_id: tempMessageId
     });
   } catch (error) {
     logger.error('Erro ao enviar mensagem:', {
@@ -718,7 +719,8 @@ export async function sendAttachment(req, res) {
     res.json({
       success: true,
       message: 'Anexo enviado',
-      savedMessage
+      savedMessage,
+      temp_message_id: tempMessageId
     });
   } catch (error) {
     logger.error('Erro ao enviar anexo:', {

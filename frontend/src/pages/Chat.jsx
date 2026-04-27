@@ -761,7 +761,6 @@ function Chat() {
   const handleSendAttachment = async () => {
     if (!attachmentFile || !selectedConversation) return;
 
-    const tempMessageId = `temp_${Date.now()}`;
     const file = attachmentFile;
     const caption = captionInput;
 
@@ -770,43 +769,40 @@ function Chat() {
     setCaptionInput('');
     setAttachmentFile(null);
 
-    // Adicionar mensagem otimista com loading
-    const optimisticMessage = {
-      id: null,
-      message_id: tempMessageId,
-      conversation_id: selectedConversation.id,
-      from_me: true,
-      message_type: file.type.startsWith('image/') ? 'image' :
-                   file.type.startsWith('video/') ? 'video' :
-                   file.type.startsWith('audio/') ? 'audio' : 'document',
-      content: '', // Será preenchido após upload
-      metadata: {
-        caption: caption,
-        filename: file.name,
-        mimetype: file.type,
-        loading: true // Flag para indicar loading
-      },
-      timestamp: new Date().toISOString(),
-      is_read: false,
-      is_delivered: false
-    };
-
-    setOptimisticMessages(prev => ({
-      ...prev,
-      [selectedConversation.id]: [...(prev[selectedConversation.id] || []), optimisticMessage]
-    }));
-
     try {
       // Enviar em background
-      await conversationsAPI.sendAttachment(selectedConversation.id, file, caption);
+      const response = await conversationsAPI.sendAttachment(selectedConversation.id, file, caption);
+      const tempMessageId = response.data.temp_message_id;
+
+      // Adicionar mensagem otimista com loading usando o ID retornado pelo backend
+      const optimisticMessage = {
+        id: null,
+        message_id: tempMessageId,
+        conversation_id: selectedConversation.id,
+        from_me: true,
+        message_type: file.type.startsWith('image/') ? 'image' :
+                     file.type.startsWith('video/') ? 'video' :
+                     file.type.startsWith('audio/') ? 'audio' : 'document',
+        content: '', // Será preenchido após upload
+        metadata: {
+          caption: caption,
+          filename: file.name,
+          mimetype: file.type,
+          loading: true // Flag para indicar loading
+        },
+        timestamp: new Date().toISOString(),
+        is_read: false,
+        is_delivered: false
+      };
+
+      setOptimisticMessages(prev => ({
+        ...prev,
+        [selectedConversation.id]: [...(prev[selectedConversation.id] || []), optimisticMessage]
+      }));
+
       // A mensagem definitiva chegará via Socket.io
     } catch (error) {
       console.error('Erro ao enviar anexo:', error);
-      // Remover mensagem otimista em caso de erro
-      setOptimisticMessages(prev => ({
-        ...prev,
-        [selectedConversation.id]: (prev[selectedConversation.id] || []).filter(m => m.message_id !== tempMessageId)
-      }));
     }
   };
 
