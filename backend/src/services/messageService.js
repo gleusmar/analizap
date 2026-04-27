@@ -1297,6 +1297,19 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         }
       }
 
+      // Se ainda não tiver, tentar usar o real_message_id do objeto quoted
+      if (!quotedMessageId && quoted.real_message_id) {
+        quotedMessageId = quoted.real_message_id;
+      }
+
+      logger.info('📝 Configurando quoted message:', {
+        quotedMessageId,
+        quotedId: quoted.id,
+        quotedRealMessageId: quoted.real_message_id,
+        quotedKeyId: quoted.key?.id,
+        quotedFromMe: quoted.key?.fromMe ?? quoted.from_me
+      });
+
       messageOptions.quoted = {
         key: {
           remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
