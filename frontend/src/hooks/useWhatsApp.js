@@ -139,6 +139,18 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     }
   }, []);
 
+  const removeSession = useCallback(async () => {
+    try {
+      await connectionAPI.removeSession();
+      setConnectionStatus('disconnected');
+      setQrCode(null);
+      setPhoneNumber(null);
+    } catch (error) {
+      console.error('Erro ao remover sessão:', error);
+      throw error;
+    }
+  }, []);
+
   return {
     connectionStatus,
     qrCode,
@@ -147,6 +159,7 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     socket,
     connect,
     disconnect,
+    removeSession,
     getQR,
     refreshQR,
     loadStatus

@@ -102,6 +102,7 @@ export const tagsAPI = {
 export const connectionAPI = {
   connect: (syncPeriodDays = null) => api.post('/whatsapp/connect', { syncPeriodDays }),
   disconnect: () => api.post('/whatsapp/disconnect'),
+  removeSession: () => api.delete('/whatsapp/session'),
   getStatus: () => api.get('/whatsapp/status'),
   checkSession: () => api.get('/whatsapp/session'),
   getQR: () => api.get('/whatsapp/qr'),

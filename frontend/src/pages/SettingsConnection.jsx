@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { connectionAPI } from '../services/api';
 
 function SettingsConnection() {
-  const { connectionStatus, qrCode, phoneNumber, connect, disconnect, refreshQR } = useWhatsApp();
+  const { connectionStatus, qrCode, phoneNumber, connect, disconnect, refreshQR, removeSession } = useWhatsApp();
   const { success, error } = useToast();
   const { colors } = useTheme();
   const [connectionMessage, setConnectionMessage] = useState('');
@@ -115,6 +115,25 @@ function SettingsConnection() {
       console.error('Erro ao atualizar QR:', err);
       setConnectionMessage('Erro ao atualizar QR Code. Tente novamente.');
       error('Erro ao atualizar QR Code');
+    }
+  };
+
+  const handleRemoveSession = async () => {
+    if (!window.confirm('Tem certeza que deseja remover a sessão? Isso irá desconectar o WhatsApp e limpar todos os dados de autenticação. Você precisará escanear um novo QR Code para reconectar.')) {
+      return;
+    }
+
+    try {
+      setConnectionMessage('Removendo sessão...');
+
+      await removeSession();
+      setConnectionProgress(0);
+      setConnectionMessage('Sessão removida com sucesso. Conecte novamente para gerar um novo QR Code.');
+      success('Sessão removida com sucesso');
+    } catch (err) {
+      console.error('Erro ao remover sessão:', err);
+      setConnectionMessage('Erro ao remover sessão. Tente novamente.');
+      error('Erro ao remover sessão');
     }
   };
 
@@ -255,12 +274,20 @@ function SettingsConnection() {
               Conectar
             </button>
           ) : connectionStatus === 'connected' ? (
-            <button
-              onClick={handleDisconnect}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-            >
-              Desconectar
-            </button>
+            <>
+              <button
+                onClick={handleDisconnect}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+              >
+                Desconectar
+              </button>
+              <button
+                onClick={handleRemoveSession}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
+              >
+                Remover Sessão
+              </button>
+            </>
           ) : (
             <button
               disabled
