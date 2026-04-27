@@ -661,6 +661,12 @@ function setupEvents(socket) {
 
     logger.info('Processando mensagem enviada (não encontrou temporária):', { messageId, remoteJid });
 
+    // Verificar se é mensagem de protocolo antes de processar
+    if (message.message && message.message.protocolMessage) {
+      logger.info('Mensagem de protocolo enviada, ignorando:', { messageId });
+      return;
+    }
+
     // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
     const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
 
@@ -701,22 +707,39 @@ function setupEvents(socket) {
               });
 
               // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
-              const { error } = await supabase
+              // Verificar se o conteúdo já é uma URL (já foi processado)
+              const { data: currentMessage } = await supabase
                 .from('messages')
-                .update({ content: publicUrl })
-                .eq('message_id', processedMessage.message_id);
+                .select('content')
+                .eq('message_id', processedMessage.message_id)
+                .single();
 
-              if (error) {
-                logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
+              // Só atualizar se o conteúdo atual não for uma URL (começa com http)
+              const isAlreadyUrl = currentMessage?.content?.startsWith('http');
+
+              if (isAlreadyUrl) {
+                logger.info('Mídia já processada, ignorando atualização:', {
+                  messageId: processedMessage.message_id,
+                  currentContent: currentMessage?.content
+                });
               } else {
-                logger.info('Mensagem atualizada com URL da mídia no banco');
-                // Emitir evento de atualização de mensagem quando a mídia for processada
-                if (io) {
-                  io.emit('whatsapp:message_updated', {
-                    conversation_id: processedMessage.conversation_id,
-                    message_id: processedMessage.message_id,
-                    content: publicUrl
-                  });
+                const { error } = await supabase
+                  .from('messages')
+                  .update({ content: publicUrl })
+                  .eq('message_id', processedMessage.message_id);
+
+                if (error) {
+                  logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
+                } else {
+                  logger.info('Mensagem atualizada com URL da mídia no banco');
+                  // Emitir evento de atualização de mensagem quando a mídia for processada
+                  if (io) {
+                    io.emit('whatsapp:message_updated', {
+                      conversation_id: processedMessage.conversation_id,
+                      message_id: processedMessage.message_id,
+                      content: publicUrl
+                    });
+                  }
                 }
               }
             })
