@@ -1259,7 +1259,6 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
 
         // Se for mídia, usar o caption ou descrição
         if (quoted.message_type) {
-          const { MESSAGE_TYPES } = await import('./messageTypes.js');
           switch (quoted.message_type) {
             case MESSAGE_TYPES.IMAGE:
               quotedContent = quoted.metadata?.caption || '📷 Imagem';
