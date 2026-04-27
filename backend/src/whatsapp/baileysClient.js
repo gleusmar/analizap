@@ -854,13 +854,13 @@ function setupEvents(socket) {
         return;
       }
 
-      // Mensagem enviada por nós com notify - adicionar ao batching para processamento posterior
+      // Mensagem enviada por nós com notify - IGNORAR (vai ser processada em append)
       if (isFromMe && type === 'notify') {
-        logger.info('📤 Mensagem enviada por nós com notify, adicionando ao batching:', {
+        logger.info('📤 Mensagem enviada por nós com notify, ignorando (vai ser processada em append):', {
           messageId: message.key?.id,
           remoteJid: message.key?.remoteJid
         });
-        addToMessageBatch(message, type);
+        return;
       }
       // Mensagem recebida com notify - processar sempre (mesmo sem conteúdo)
       else if (!isFromMe && type === 'notify') {
