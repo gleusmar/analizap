@@ -1,5 +1,4 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import { unlink } from 'fs/promises';
 import path from 'path';
@@ -18,10 +17,8 @@ export async function downloadMediaFromWhatsApp(sock, message) {
   } catch (error) {
     // Se for erro 403, a URL expirou - é normal para mensagens antigas
     if (error.response?.status === 403 || error.code === 'ERR_BAD_REQUEST') {
-      logger.warn('URL de mídia expirada (403), não é possível baixar');
       return null;
     }
-    logger.error('Erro ao baixar mídia do WhatsApp:', error);
     throw error;
   }
 }
@@ -48,15 +45,12 @@ export async function saveTempFile(buffer, fileName) {
  */
 export async function processMessageMedia(sock, message, messageType, messageId) {
   try {
-    logger.info('🎬 Iniciando processamento de mídia:', { messageId, messageType });
 
     // Faz download da mídia
     const buffer = await downloadMediaFromWhatsApp(sock, message);
-    logger.info('📥 Download concluído:', { messageId, bufferSize: buffer?.length });
 
     // Se buffer for null (URL expirada), retorna null sem erro
     if (!buffer) {
-      logger.warn('⚠️ Buffer null, URL expirada:', { messageId });
       return null;
     }
 
@@ -84,7 +78,6 @@ export async function processMessageMedia(sock, message, messageType, messageId)
       }
     }
 
-    logger.info('📋 Metadados extraídos:', { messageId, extension, mimeType });
 
     // Fallback para extensões padrão se não conseguir do metadata
     if (!extension) {
@@ -112,18 +105,13 @@ export async function processMessageMedia(sock, message, messageType, messageId)
     }
 
     const fileName = `${messageId}.${extension}`;
-    logger.info('💾 Salvando arquivo temporário:', { messageId, fileName });
     const tempFilePath = await saveTempFile(buffer, fileName);
 
-    logger.info('☁️ Fazendo upload para Supabase:', { messageId, fileName });
     const publicUrl = await uploadFileToSupabase(tempFilePath, fileName, mimeType);
-    logger.info('✅ Upload concluído:', { messageId, publicUrl });
 
     await unlink(tempFilePath);
-    logger.info('🗑️ Arquivo temporário removido:', { messageId });
     return publicUrl;
   } catch (error) {
-    logger.error('❌ Erro ao processar mídia:', { messageId, error: error.message, stack: error.stack });
     throw error;
   }
 }

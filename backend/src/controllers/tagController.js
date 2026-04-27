@@ -66,7 +66,6 @@ export const tagController = {
 
       if (error) throw error;
 
-      logger.info('Tag criada', { name, id: data.id }, req.user?.id, 'TAG_CREATED', req);
       res.status(201).json(data);
     } catch (error) {
       logger.error('Erro ao criar tag', { error: error.message }, req.user?.id, 'TAG_CREATE_ERROR', req);
@@ -109,7 +108,6 @@ export const tagController = {
         return res.status(404).json({ error: 'Tag não encontrada' });
       }
 
-      logger.info('Tag atualizada', { id, name: data.name }, req.user?.id, 'TAG_UPDATED', req);
       res.json(data);
     } catch (error) {
       logger.error('Erro ao atualizar tag', { error: error.message }, req.user?.id, 'TAG_UPDATE_ERROR', req);
@@ -133,7 +131,6 @@ export const tagController = {
 
       if (error) throw error;
 
-      logger.info('Tag excluída', { id }, req.user?.id, 'TAG_DELETED', req);
       res.json({ success: true });
     } catch (error) {
       logger.error('Erro ao excluir tag', { error: error.message }, req.user?.id, 'TAG_DELETE_ERROR', req);
@@ -190,7 +187,6 @@ export const tagController = {
 
       if (error) throw error;
 
-      logger.info('Tag adicionada à conversa', { conversationId, tagId }, req.user?.id, 'TAG_ADDED_TO_CONVERSATION', req);
       res.status(201).json(data);
     } catch (error) {
       logger.error('Erro ao adicionar tag à conversa', { error: error.message }, req.user?.id, 'ADD_TAG_ERROR', req);
@@ -211,7 +207,6 @@ export const tagController = {
 
       if (error) throw error;
 
-      logger.info('Tag removida da conversa', { conversationId, tagId }, req.user?.id, 'TAG_REMOVED_FROM_CONVERSATION', req);
       res.json({ success: true });
     } catch (error) {
       logger.error('Erro ao remover tag da conversa', { error: error.message }, req.user?.id, 'REMOVE_TAG_ERROR', req);

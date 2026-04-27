@@ -18,7 +18,6 @@ let syncPeriodDays = 7; // Período padrão de sincronização em dias
  */
 export function setSyncPeriodDays(days) {
   syncPeriodDays = days;
-  logger.info(`Período de sincronização definido para ${days} dias`);
 }
 
 /**
@@ -137,7 +136,6 @@ export const MESSAGE_TYPES = {
 export function extractPhoneFromJid(jid) {
   if (!jid) return null;
   if (jid.endsWith('@lid')) {
-    logger.warn('Tentando extrair phone de LID, retornando null', { jid });
     return null;
   }
   return jid.split('@')[0];
@@ -172,7 +170,6 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
         jid = mappedJid;
         phone = extractPhoneFromJid(jid);
       } else {
-        logger.warn('LID não mapeado, usando LID como phone', { lid: jid });
         phone = jid; // Usa o LID completo como identificador
       }
     }
@@ -199,20 +196,13 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
         .single();
 
       if (lidConversation) {
-        logger.info('Conversa encontrada pelo LID, atualizando phone para JID real', {
-          conversationId: lidConversation.id,
-          oldPhone: lidConversation.phone,
-          newPhone: phone
-        });
-
-        // Atualiza o phone da conversa existente (de LID para phone real)
         const { error: phoneUpdateError } = await supabase
           .from('conversations')
           .update({ phone: phone })
           .eq('id', lidConversation.id);
 
         if (phoneUpdateError) {
-          logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+          throw phoneUpdateError;
         } else {
           lidConversation.phone = phone; // Atualiza localmente para retorno
         }
@@ -234,20 +224,13 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
             .single();
 
           if (conversationByMappedPhone) {
-            logger.info('Conversa encontrada pelo phone do JID mapeado, atualizando phone', {
-              conversationId: conversationByMappedPhone.id,
-              oldPhone: conversationByMappedPhone.phone,
-              newPhone: phone
-            });
-
-            // Atualiza o phone da conversa existente (de phone real para LID, para manter consistência)
             const { error: phoneUpdateError } = await supabase
               .from('conversations')
               .update({ phone: phone })
               .eq('id', conversationByMappedPhone.id);
 
             if (phoneUpdateError) {
-              logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+              throw phoneUpdateError;
             } else {
               conversationByMappedPhone.phone = phone; // Atualiza localmente para retorno
             }
@@ -270,7 +253,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
           .eq('id', existingConversation.id);
 
         if (updateError) {
-          logger.error('Erro ao reabrir conversa:', updateError);
+          throw updateError;
         }
       }
 
@@ -282,7 +265,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
           .eq('id', existingConversation.id);
 
         if (phoneUpdateError) {
-          logger.error('Erro ao atualizar phone da conversa:', phoneUpdateError);
+          throw phoneUpdateError;
         } else {
           existingConversation.phone = phone; // Atualiza localmente para retorno
         }
@@ -297,7 +280,7 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
           .eq('id', existingConversation.id);
 
         if (nameUpdateError) {
-          logger.error('Erro ao atualizar nome da conversa:', nameUpdateError);
+          throw nameUpdateError;
         } else {
           existingConversation.contact_name = contactName; // Atualiza localmente para retorno
         }
@@ -353,14 +336,11 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .single();
 
     if (createError) {
-      logger.error('Erro ao criar conversa:', createError);
       throw createError;
     }
 
-    logger.info('Nova conversa criada com sucesso', { phone, conversationId: newConversation.id });
     return newConversation;
   } catch (error) {
-    logger.error('Erro ao obter ou criar conversa:', error);
     throw error;
   }
 }
@@ -381,7 +361,6 @@ export async function uploadFileToSupabase(filePath, fileName, mimeType) {
       });
 
     if (error) {
-      logger.error('Erro ao fazer upload:', error);
       throw error;
     }
 
@@ -392,7 +371,6 @@ export async function uploadFileToSupabase(filePath, fileName, mimeType) {
 
     return publicUrl;
   } catch (error) {
-    logger.error('Erro no upload do arquivo:', error);
     throw error;
   }
 }
@@ -437,12 +415,6 @@ export async function saveMessage(messageData) {
           .single();
 
         if (tempMessage) {
-          logger.info('Atualizando mensagem temporária com message_id real:', {
-            tempMessageId: tempMessage.message_id,
-            realMessageId: message_id
-          });
-
-          // Atualizar a mensagem temporária com o message_id real e outros campos
           const { data: updatedMessage, error: updateError } = await supabase
             .from('messages')
             .update({
@@ -456,7 +428,6 @@ export async function saveMessage(messageData) {
             .single();
 
           if (updateError) {
-            logger.error('Erro ao atualizar mensagem temporária:', updateError);
             throw updateError;
           }
 
@@ -470,7 +441,6 @@ export async function saveMessage(messageData) {
         }
       } catch (e) {
         // Nenhuma mensagem temporária encontrada, continua com inserção normal
-        logger.debug('Nenhuma mensagem temporária encontrada para atualizar');
       }
     }
 
@@ -492,7 +462,6 @@ export async function saveMessage(messageData) {
       .single();
 
     if (error) {
-      logger.error('Erro ao salvar mensagem:', error);
       throw error;
     }
 
@@ -504,7 +473,6 @@ export async function saveMessage(messageData) {
 
     return message;
   } catch (error) {
-    logger.error('Erro ao salvar mensagem:', error);
     throw error;
   }
 }
@@ -523,7 +491,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
 
     // Verifica se msg existe
     if (!msg) {
-      logger.warn('Mensagem sem conteúdo, ignorando');
       return null;
     }
 
@@ -557,7 +524,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
                       msg.templateMessage;
 
     if (!hasContent) {
-      logger.warn('Mensagem sem conteúdo reconhecido, ignorando:', Object.keys(msg));
       return null;
     }
 
@@ -606,19 +572,13 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
           .single();
 
         if (lidConversation && lidConversation.phone !== phone) {
-          logger.info('Atualizando conversa criada com LID para usar phone real', {
-            conversationId: lidConversation.id,
-            oldPhone: lidConversation.phone,
-            newPhone: phone
-          });
-
           const { error: updateError } = await supabase
             .from('conversations')
             .update({ phone: phone })
             .eq('id', lidConversation.id);
 
           if (updateError) {
-            logger.error('Erro ao atualizar phone da conversa LID:', updateError);
+            throw updateError;
           }
         }
       } catch (e) {
@@ -675,7 +635,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         mediaKeyTimestamp: msg.imageMessage.mediaKeyTimestamp,
         directPath: msg.imageMessage.directPath
       };
-      logger.info('📷 Imagem detectada, metadados:', metadata);
     }
     // Áudio
     else if (msg.audioMessage) {
@@ -686,7 +645,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         seconds: msg.audioMessage.seconds,
         fileLength: msg.audioMessage.fileLength
       };
-      logger.info('🎵 Áudio detectado, metadados:', metadata);
     }
     // Vídeo
     else if (msg.videoMessage) {
@@ -706,12 +664,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
         mediaKeyTimestamp: msg.videoMessage.mediaKeyTimestamp,
         directPath: msg.videoMessage.directPath
       };
-      logger.info('🎬 Vídeo detectado, metadados:', {
-        caption: metadata.caption,
-        seconds: metadata.seconds,
-        width: metadata.width,
-        height: metadata.height
-      });
     }
     // Documento
     else if (msg.documentMessage) {
@@ -1055,8 +1007,6 @@ export async function markMultipleConversationsAsRead(conversationIds) {
       logger.error('Erro ao zerar contador de não lidas de múltiplas conversas:', updateError);
       throw updateError;
     }
-
-    logger.info(`Marcadas ${conversationIds.length} conversas como lidas`);
   } catch (error) {
     logger.error('Erro ao marcar múltiplas conversas como lidas:', error);
     throw error;
@@ -1132,12 +1082,11 @@ export async function openConversation(conversationId, sock = null) {
         // Se inscrever nas atualizações de presença do contato
         try {
           await sock.presenceSubscribe(jid);
-          logger.info('Inscrito nas atualizações de presença:', { jid });
         } catch (error) {
-          logger.warn('Erro ao se inscrever na presença:', error);
+          // Erro ao se inscrever na presença, ignorar
         }
       } catch (error) {
-        logger.warn('Erro ao buscar contato do WhatsApp:', error);
+        // Erro ao buscar contato, ignorar
       }
     }
 
@@ -1225,41 +1174,27 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
       const remoteJid = quoted.key?.remoteJid || phoneJid;
 
-      logger.info('📝 Processando citação:', {
-        quotedId: quoted.id,
-        quotedMessageId: quoted.message_id,
-        quotedRealMessageId: quoted.real_message_id,
-        quotedKeyId: quoted.key?.id,
-        msgId,
-        remoteJid
-      });
-
       // 1. Tentar carregar do store do Baileys
       let quotedMessage = null;
-      if (msgId && sock.loadMessage) {
+
+      if (quoted.message_id) {
         try {
           quotedMessage = await sock.loadMessage(remoteJid, msgId);
-          logger.info('📦 Mensagem encontrada no store do Baileys:', !!quotedMessage);
         } catch (error) {
-          logger.warn('Erro ao buscar mensagem do store do Baileys:', error.message);
+          // Erro ao buscar mensagem do store
         }
       }
 
       if (quotedMessage) {
         // Usar a mensagem do store do Baileys diretamente (conforme documentação)
         messageOptions.quoted = quotedMessage;
-        logger.info('✅ Citação configurada usando mensagem do store do Baileys');
       } else {
-        // 2. RECONSTRUÇÃO MANUAL (Fallback)
-        // Se não achou no store, montamos a estrutura básica que o WhatsApp exige
-        logger.info('⚠️ Mensagem não encontrada no store, usando reconstrução manual');
 
         // Determinar o conteúdo da mensagem citada
         let quotedContent = quoted.content || quoted.text || 'Mensagem anterior';
 
         // Se for mídia, usar o caption ou descrição
         if (quoted.message_type) {
-          const { MESSAGE_TYPES } = await import('./messageTypes.js');
           switch (quoted.message_type) {
             case MESSAGE_TYPES.IMAGE:
               quotedContent = quoted.metadata?.caption || '📷 Imagem';
@@ -1290,28 +1225,14 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
             conversation: quotedContent
           }
         };
-
-        logger.info('✅ Citação configurada usando reconstrução manual:', {
-          keyId: messageOptions.quoted.key.id,
-          keyRemoteJid: messageOptions.quoted.key.remoteJid,
-          keyParticipant: messageOptions.quoted.key.participant,
-          messageContent: messageOptions.quoted.message.conversation
-        });
       }
     }
-
-    logger.info('📤 Enviando mensagem:', {
-      phoneJid,
-      messageType,
-      hasQuoted: !!messageOptions.quoted
-    });
 
     // Envia mensagem
     const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
 
     return sentMessage;
   } catch (error) {
-    logger.error('Erro ao enviar mensagem:', error);
     throw error;
   }
 }
@@ -1321,14 +1242,6 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
  */
 export async function sendWhatsAppAttachment(sock, conversationId, file, caption = '') {
   try {
-    logger.info('sendWhatsAppAttachment chamado:', {
-      conversationId,
-      fileName: file?.originalname,
-      mimeType: file?.mimetype,
-      fileSize: file?.size,
-      caption
-    });
-
     // Obtém conversa para obter o phone
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
@@ -1337,11 +1250,8 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
       .single();
 
     if (convError || !conversation) {
-      logger.error('Conversa não encontrada:', convError);
       throw new Error('Conversa não encontrada');
     }
-
-    logger.info('Conversa encontrada:', { phone: conversation.phone });
 
     const phoneJid = `${conversation.phone}@s.whatsapp.net`;
 
@@ -1356,20 +1266,17 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
         image: file.buffer,
         caption: caption || ''
       };
-      logger.info('Tipo de arquivo: imagem');
     } else if (mimeType.startsWith('video/')) {
       messageType = 'video';
       messageOptions = {
         video: file.buffer,
         caption: caption || ''
       };
-      logger.info('Tipo de arquivo: vídeo');
     } else if (mimeType.startsWith('audio/')) {
       messageType = 'audio';
       messageOptions = {
         audio: file.buffer
       };
-      logger.info('Tipo de arquivo: áudio');
     } else {
       messageType = 'document';
       messageOptions = {
@@ -1378,13 +1285,10 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
         fileName: file.originalname,
         caption: caption || ''
       };
-      logger.info('Tipo de arquivo: documento');
     }
 
-    logger.info('Enviando mensagem para o WhatsApp...');
     // Envia mensagem
     const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
-    logger.info('Mensagem enviada para o WhatsApp com sucesso:', sentMessage.key?.id);
 
     // Extrair metadados completos da resposta do WhatsApp para citação
     let completeMetadata = {
@@ -1408,11 +1312,6 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
         height: imgMsg.height,
         fileLength: imgMsg.fileLength
       };
-      logger.info('Metadados de imagem extraídos:', {
-        hasThumbnail: !!completeMetadata.thumbnail,
-        hasFileSha256: !!completeMetadata.fileSha256,
-        hasMediaKey: !!completeMetadata.mediaKey
-      });
     } else if (sentMessage.message?.videoMessage) {
       const vidMsg = sentMessage.message.videoMessage;
       completeMetadata = {
@@ -1462,157 +1361,6 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
 
     return sentMessage;
   } catch (error) {
-    logger.error('Erro ao enviar anexo para WhatsApp:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
-    throw error;
-  }
-}
-
-/**
- * Encaminha mensagem via WhatsApp
- */
-export async function forwardWhatsAppMessage(sock, fromConversationId, toConversationId, messageId) {
-  try {
-    // Obtém conversa de origem para obter o phone
-    const { data: fromConversation, error: fromConvError } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('id', fromConversationId)
-      .single();
-
-    if (fromConvError || !fromConversation) {
-      throw new Error('Conversa de origem não encontrada');
-    }
-
-    // Obtém conversa de destino para obter o phone
-    const { data: toConversation, error: toConvError } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('id', toConversationId)
-      .single();
-
-    if (toConvError || !toConversation) {
-      throw new Error('Conversa de destino não encontrada');
-    }
-
-    const fromPhoneJid = `${fromConversation.phone}@s.whatsapp.net`;
-    const toPhoneJid = `${toConversation.phone}@s.whatsapp.net`;
-
-    // Buscar a mensagem original para obter o conteúdo
-    // Tenta buscar por message_id primeiro, se não encontrar, busca por id (do banco)
-    let { data: message, error: msgError } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('message_id', messageId)
-      .single();
-
-    if (msgError || !message) {
-      // Se não encontrou por message_id, tenta por id
-      const result = await supabase
-        .from('messages')
-        .select('*')
-        .eq('id', messageId)
-        .single();
-      message = result.data;
-      msgError = result.error;
-    }
-
-    if (msgError || !message) {
-      throw new Error('Mensagem não encontrada');
-    }
-
-    // Reenviar a mensagem (em vez de usar forward direto)
-    let messageOptions = {};
-
-    // Configurar opções baseado no tipo de mensagem
-    switch (message.message_type) {
-      case MESSAGE_TYPES.TEXT:
-        messageOptions = { text: message.content };
-        break;
-      case MESSAGE_TYPES.IMAGE:
-        messageOptions = { image: { url: message.content }, caption: message.metadata?.caption || '' };
-        break;
-      case MESSAGE_TYPES.AUDIO:
-        messageOptions = { audio: { url: message.content } };
-        break;
-      case MESSAGE_TYPES.VIDEO:
-        messageOptions = { video: { url: message.content }, caption: message.metadata?.caption || '' };
-        break;
-      case MESSAGE_TYPES.DOCUMENT:
-        messageOptions = { document: { url: message.content }, mimetype: message.metadata?.mimetype, fileName: message.metadata?.filename };
-        break;
-      case MESSAGE_TYPES.LOCATION:
-        const locationData = JSON.parse(message.content);
-        messageOptions = {
-          location: {
-            degreesLatitude: locationData.latitude,
-            degreesLongitude: locationData.longitude,
-            name: locationData.name
-          }
-        };
-        break;
-      default:
-        messageOptions = { text: message.content };
-    }
-
-    // Envia mensagem para o destino
-    const sentMessage = await sock.sendMessage(toPhoneJid, messageOptions);
-
-    logger.info('Mensagem encaminhada:', { fromConversationId, toConversationId, messageId });
-
-    // Gerar UUID válido para o id e temp_message_id
-    const messageIdUuid = uuidv4();
-    const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-    // Salvar mensagem no banco
-    const { data: savedMessage, error: saveError } = await supabase
-      .from('messages')
-      .insert({
-        id: messageIdUuid,
-        conversation_id: toConversationId,
-        message_id: tempMessageId,
-        content: message.content,
-        message_type: message.message_type,
-        from_me: true,
-        metadata: message.metadata || {},
-        is_read: false,
-        is_delivered: false,
-        timestamp: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (saveError) {
-      logger.error('Erro ao salvar mensagem encaminhada:', saveError);
-    } else {
-      // Atualizar real_message_id em background
-      const realMessageId = sentMessage.key?.id;
-      if (realMessageId) {
-        setTimeout(async () => {
-          await supabase
-            .from('messages')
-            .update({ real_message_id: realMessageId })
-            .eq('id', messageIdUuid);
-          logger.info('real_message_id atualizado para mensagem encaminhada:', realMessageId);
-        }, 1000);
-      }
-
-      // Emitir evento Socket.io
-      const io = getIO();
-      if (io) {
-        io.emit('whatsapp:message', {
-          conversation_id: toConversationId,
-          message: savedMessage
-        });
-      }
-    }
-
-    return sentMessage;
-  } catch (error) {
-    logger.error('Erro ao encaminhar mensagem:', error);
     throw error;
   }
 }
@@ -1647,10 +1395,8 @@ export async function sendWhatsAppReaction(sock, conversationId, messageId, reac
       }
     });
 
-    logger.info('Reação enviada:', { conversationId, messageId, reaction });
     return { success: true };
   } catch (error) {
-    logger.error('Erro ao enviar reação:', error);
     throw error;
   }
 }

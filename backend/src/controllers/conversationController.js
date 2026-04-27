@@ -198,22 +198,10 @@ export async function sendMessage(req, res) {
     // Aceita tanto camelCase quanto snake_case para message_type
     const messageTypeValue = message_type || messageType;
 
-    logger.info('📤 [POST /send] Requisição de envio de mensagem recebida:', {
-      conversationId,
-      content,
-      message_type: messageTypeValue,
-      metadata,
-      userId: req.user?.id,
-      userEmail: req.user?.email
-    });
-
     const sock = getSocket();
     if (!sock) {
-      logger.warn('WhatsApp não está conectado ao tentar enviar mensagem');
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
-
-    logger.info('Socket obtido com sucesso, enviando mensagem...');
 
     // Buscar usuário para verificar assinatura
     const { data: user, error: userError } = await supabase
@@ -223,29 +211,13 @@ export async function sendMessage(req, res) {
       .single();
 
     if (userError) {
-      logger.error('Erro ao buscar usuário:', userError);
+      throw userError;
     }
-
-    logger.info('Verificando assinatura:', {
-      userId: req.user.id,
-      user: user,
-      has_signature: user?.has_signature,
-      nickname: user?.nickname,
-      message_type: messageTypeValue
-    });
 
     // Formatar mensagem com assinatura se o usuário tiver
     let formattedContent = content;
     if (user?.has_signature && user?.nickname && messageTypeValue === MESSAGE_TYPES.TEXT) {
       formattedContent = `*_${user.nickname}_*\n${content}`;
-      logger.info('Assinatura aplicada:', { nickname: user.nickname });
-    } else {
-      logger.info('Assinatura não aplicada:', {
-        hasUser: !!user,
-        hasSignature: user?.has_signature,
-        hasNickname: !!user?.nickname,
-        isText: messageTypeValue === MESSAGE_TYPES.TEXT
-      });
     }
 
     // Gerar ID temporário para a mensagem
@@ -294,9 +266,8 @@ export async function sendMessage(req, res) {
           .eq('id', savedMessage.id);
 
         if (updateError) {
-          logger.error('Erro ao atualizar real_message_id:', updateError);
+          throw updateError;
         } else {
-          logger.info('real_message_id atualizado em background:', sentMessage.key.id);
 
           // Buscar mensagem atualizada para enviar ao frontend
           const { data: updatedMessage } = await supabase
@@ -308,32 +279,21 @@ export async function sendMessage(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
-            logger.info('📡 Emitindo whatsapp:message_updated:', {
-              conversation_id: conversationId,
-              temp_message_id: tempMessageId,
-              real_message_id: sentMessage.key.id,
-              message_id: updatedMessage?.message_id
-            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
-            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
-          } else {
-            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
       .catch(error => {
-        logger.error('Erro ao enviar mensagem para WhatsApp:', error);
         // Marcar mensagem como falha
         supabase
           .from('messages')
           .update({ delivery_error: error.message || 'Erro ao enviar mensagem' })
-          .eq('id', savedMessage.id)
-          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
+          .eq('id', savedMessage.id);
       });
 
     // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
@@ -350,8 +310,6 @@ export async function sendMessage(req, res) {
           .from('messages')
           .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
           .eq('id', savedMessage.id);
-
-        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
 
         // Emitir evento para o frontend sobre a falha
         const io = getIO();
@@ -373,12 +331,6 @@ export async function sendMessage(req, res) {
       temp_message_id: tempMessageId
     });
   } catch (error) {
-    logger.error('Erro ao enviar mensagem:', {
-      message: error.message,
-      stack: error.stack,
-      conversationId,
-      content: req.body?.content?.substring(0, 50)
-    });
     res.status(500).json({ error: 'Erro ao enviar mensagem', details: error.message });
   }
 }
@@ -395,7 +347,6 @@ export async function deleteConversation(req, res) {
       return res.status(403).json({ error: 'Apenas admin pode excluir conversas' });
     }
 
-
     // Excluir mensagens da conversa
     const { error: deleteMessagesError } = await supabase
       .from('messages')
@@ -403,7 +354,6 @@ export async function deleteConversation(req, res) {
       .eq('conversation_id', conversationId);
 
     if (deleteMessagesError) {
-      logger.error('Erro ao excluir mensagens:', deleteMessagesError);
       throw deleteMessagesError;
     }
 
@@ -414,7 +364,6 @@ export async function deleteConversation(req, res) {
       .eq('id', conversationId);
 
     if (deleteConversationError) {
-      logger.error('Erro ao excluir conversa:', deleteConversationError);
       throw deleteConversationError;
     }
 
@@ -423,7 +372,6 @@ export async function deleteConversation(req, res) {
       message: 'Conversa excluída com sucesso'
     });
   } catch (error) {
-    logger.error('Erro ao excluir conversa:', error);
     res.status(500).json({ error: 'Erro ao excluir conversa' });
   }
 }
@@ -436,12 +384,6 @@ export async function forwardMessage(req, res) {
     const { conversationId } = req.params;
     const { messageIds, targetConversationIds } = req.body;
 
-    logger.info('Recebida solicitação de encaminhamento:', {
-      conversationId,
-      messageIds,
-      targetConversationIds
-    });
-
     if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
       return res.status(400).json({ error: 'messageIds é obrigatório e deve ser um array não vazio' });
     }
@@ -452,7 +394,6 @@ export async function forwardMessage(req, res) {
 
     const sock = getSocket();
     if (!sock) {
-      logger.warn('WhatsApp não está conectado ao tentar encaminhar mensagem');
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
 
@@ -464,12 +405,6 @@ export async function forwardMessage(req, res) {
           const forwarded = await forwardWhatsAppMessage(sock, conversationId, targetConvId, messageId);
           results.push({ targetConvId, messageId, success: true, forwarded });
         } catch (error) {
-          logger.error('Erro ao encaminhar mensagem:', {
-            error: error.message,
-            stack: error.stack,
-            targetConvId,
-            messageId
-          });
           results.push({ targetConvId, messageId, success: false, error: error.message });
         }
       }
@@ -481,7 +416,6 @@ export async function forwardMessage(req, res) {
       results
     });
   } catch (error) {
-    logger.error('Erro ao encaminhar mensagem:', error);
     res.status(500).json({ error: 'Erro ao encaminhar mensagem' });
   }
 }
@@ -494,15 +428,8 @@ export async function sendReaction(req, res) {
     const { conversationId } = req.params;
     const { messageId, reaction } = req.body;
 
-    logger.info('Recebida solicitação de envio de reação:', {
-      conversationId,
-      messageId,
-      reaction
-    });
-
     const sock = getSocket();
     if (!sock) {
-      logger.warn('WhatsApp não está conectado ao tentar enviar reação');
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
 
@@ -538,7 +465,7 @@ export async function sendReaction(req, res) {
       });
 
     if (reactionError) {
-      logger.error('Erro ao salvar reação no banco:', reactionError);
+      throw reactionError;
     }
 
     res.json({
@@ -546,7 +473,6 @@ export async function sendReaction(req, res) {
       message: 'Reação enviada'
     });
   } catch (error) {
-    logger.error('Erro ao enviar reação:', error);
     res.status(500).json({ error: 'Erro ao enviar reação' });
   }
 }
@@ -560,72 +486,25 @@ export async function sendAttachment(req, res) {
     const { caption } = req.body;
     const file = req.file;
 
-    logger.info('📎 [POST /attachment] Requisição de envio de anexo recebida:', {
-      conversationId,
-      caption,
-      hasFile: !!file,
-      fileName: file?.originalname,
-      fileMimetype: file?.mimetype,
-      fileSize: file?.size
-    });
-
     if (!file) {
-      logger.error('Arquivo não encontrado na requisição');
       return res.status(400).json({ error: 'Arquivo não encontrado' });
     }
 
     const sock = getSocket();
     if (!sock) {
-      logger.error('WhatsApp não está conectado');
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
 
-    logger.info('Enviando anexo para o WhatsApp...');
-    const sentMessage = await sendWhatsAppAttachment(
-      sock,
-      conversationId,
-      file,
-      caption
-    );
-    logger.info('Anexo enviado para o WhatsApp com sucesso:', sentMessage);
+    // Enviar anexo para o WhatsApp
+    const sentMessage = await sendWhatsAppAttachment(sock, conversationId, file, caption);
 
-    // Fazer upload do arquivo para Supabase Storage
-    logger.info('Fazendo upload do arquivo para Supabase...');
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
-
-    const fileName = `${conversationId}/${Date.now()}_${file.originalname}`;
-    const { data: uploadData, error: uploadError } = await supabase
-      .storage
-      .from('whatsapp-media')
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: true
-      });
-
-    if (uploadError) {
-      logger.error('Erro ao fazer upload do arquivo:', uploadError);
-      throw uploadError;
-    }
-
-    logger.info('Upload para Supabase realizado com sucesso');
-
-    // Obter URL pública
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('whatsapp-media')
-      .getPublicUrl(fileName);
-
-    logger.info('URL pública obtida:', publicUrl);
+    // Fazer upload do arquivo para o Supabase Storage
+    const publicUrl = await uploadFileToSupabase(filePath, fileName, file.mimetype);
 
     // Gerar ID temporário para a mensagem
     const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Salvar mensagem com ID temporário
-    logger.info('Salvando mensagem no banco...');
+    // Salvar mensagem no banco de dados
     const savedMessage = await saveMessage({
       conversation_id: conversationId,
       message_id: tempMessageId,
@@ -635,7 +514,6 @@ export async function sendAttachment(req, res) {
       metadata: sentMessage.metadata || {},
       timestamp: new Date().toISOString()
     });
-    logger.info('Mensagem salva no banco com sucesso');
 
     // Atualizar last_message_at da conversa
     await supabase
@@ -660,9 +538,8 @@ export async function sendAttachment(req, res) {
       .eq('id', savedMessage.id)
       .then(async ({ error }) => {
         if (error) {
-          logger.error('Erro ao atualizar real_message_id:', error);
+          throw error;
         } else {
-          logger.info('real_message_id atualizado para anexo:', sentMessage.key.id);
 
           // Buscar mensagem atualizada para enviar ao frontend
           const { data: updatedMessage } = await supabase
@@ -674,32 +551,21 @@ export async function sendAttachment(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
-            logger.info('📡 Emitindo whatsapp:message_updated:', {
-              conversation_id: conversationId,
-              temp_message_id: tempMessageId,
-              real_message_id: sentMessage.key.id,
-              message_id: updatedMessage?.message_id
-            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
-            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
-          } else {
-            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
       .catch(error => {
-        logger.error('Erro ao enviar anexo para WhatsApp:', error);
         // Marcar mensagem como falha
         supabase
           .from('messages')
           .update({ delivery_error: error.message || 'Erro ao enviar anexo' })
-          .eq('id', savedMessage.id)
-          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
+          .eq('id', savedMessage.id);
       });
 
     // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
@@ -710,14 +576,14 @@ export async function sendAttachment(req, res) {
         .eq('id', savedMessage.id)
         .single();
 
+      // Se ainda não tem real_message_id e não tem erro de entrega, marca como falha
       if (message && !message.real_message_id && !message.delivery_error) {
         await supabase
           .from('messages')
           .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
           .eq('id', savedMessage.id);
 
-        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
-
+        // Emitir evento para o frontend sobre a falha
         const io = getIO();
         if (io) {
           io.emit('whatsapp:message_failed', {
@@ -736,13 +602,6 @@ export async function sendAttachment(req, res) {
       temp_message_id: tempMessageId
     });
   } catch (error) {
-    logger.error('Erro ao enviar anexo:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      conversationId,
-      hasFile: !!req.file
-    });
     res.status(500).json({ error: 'Erro ao enviar anexo' });
   }
 }
@@ -754,7 +613,6 @@ export async function sendLocation(req, res) {
   try {
     const { conversationId } = req.params;
     const { latitude, longitude } = req.body;
-
 
     const sock = getSocket();
     if (!sock) {
@@ -771,7 +629,7 @@ export async function sendLocation(req, res) {
     // Gerar ID temporário para a mensagem
     const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Salvar mensagem com ID temporário
+    // Salvar mensagem no banco de dados
     const savedMessage = await saveMessage({
       conversation_id: conversationId,
       message_id: tempMessageId,
@@ -805,9 +663,8 @@ export async function sendLocation(req, res) {
       .eq('id', savedMessage.id)
       .then(async ({ error }) => {
         if (error) {
-          logger.error('Erro ao atualizar real_message_id:', error);
+          throw error;
         } else {
-          logger.info('real_message_id atualizado para localização:', sentMessage.key.id);
 
           // Buscar mensagem atualizada para enviar ao frontend
           const { data: updatedMessage } = await supabase
@@ -819,21 +676,12 @@ export async function sendLocation(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
-            logger.info('📡 Emitindo whatsapp:message_updated:', {
-              conversation_id: conversationId,
-              temp_message_id: tempMessageId,
-              real_message_id: sentMessage.key.id,
-              message_id: updatedMessage?.message_id
-            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
-            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
-          } else {
-            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
@@ -843,8 +691,7 @@ export async function sendLocation(req, res) {
         supabase
           .from('messages')
           .update({ delivery_error: error.message || 'Erro ao enviar localização' })
-          .eq('id', savedMessage.id)
-          .catch(err => logger.error('Erro ao marcar mensagem como falha:', err));
+          .eq('id', savedMessage.id);
       });
 
     // Timeout para marcar mensagem como falha se não receber ID real após 30 segundos
@@ -860,8 +707,6 @@ export async function sendLocation(req, res) {
           .from('messages')
           .update({ delivery_error: 'Tempo esgotado: não recebeu confirmação do WhatsApp' })
           .eq('id', savedMessage.id);
-
-        logger.warn(`Mensagem ${savedMessage.id} marcada como falha (timeout)`);
 
         const io = getIO();
         if (io) {

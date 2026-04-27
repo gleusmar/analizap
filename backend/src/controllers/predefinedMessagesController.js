@@ -13,7 +13,6 @@ export async function getPredefinedMessages(req, res) {
   try {
     const userId = req.user.id;
     
-    logger.info('Buscando mensagens pré-definidas para usuário:', { userId, email: req.user.email });
 
     const { data: messages, error } = await supabase
       .from('predefined_messages')
@@ -26,7 +25,6 @@ export async function getPredefinedMessages(req, res) {
       throw error;
     }
 
-    logger.info('Mensagens encontradas:', { count: messages?.length || 0 });
     res.json({ data: messages || [] });
   } catch (error) {
     logger.error('Erro ao buscar mensagens pré-definidas:', error);
@@ -42,7 +40,6 @@ export async function createPredefinedMessage(req, res) {
     const userId = req.user.id;
     const { shortcut, content } = req.body;
 
-    logger.info('Criando mensagem pré-definida:', { 
       userId, 
       shortcut: shortcut?.substring(0, 30),
       email: req.user.email 
@@ -60,7 +57,6 @@ export async function createPredefinedMessage(req, res) {
       return res.status(400).json({ error: 'Usuário não encontrado' });
     }
 
-    logger.info('Usuário verificado com sucesso, criando mensagem...');
 
     const { data: message, error } = await supabase
       .from('predefined_messages')
@@ -77,7 +73,6 @@ export async function createPredefinedMessage(req, res) {
       throw error;
     }
 
-    logger.info(`Mensagem pré-definida criada: ${message.id}`);
     res.json({ data: message });
   } catch (error) {
     logger.error('Erro ao criar mensagem pré-definida:', error);
@@ -94,7 +89,6 @@ export async function updatePredefinedMessage(req, res) {
     const userId = req.user.id;
     const { shortcut, content } = req.body;
 
-    logger.info(`Atualizando mensagem pré-definida ${messageId}`);
 
     const { data: message, error } = await supabase
       .from('predefined_messages')
@@ -112,7 +106,6 @@ export async function updatePredefinedMessage(req, res) {
       throw error;
     }
 
-    logger.info(`Mensagem pré-definida atualizada: ${messageId}`);
     res.json({ data: message });
   } catch (error) {
     logger.error('Erro ao atualizar mensagem pré-definida:', error);
@@ -128,7 +121,6 @@ export async function deletePredefinedMessage(req, res) {
     const { messageId } = req.params;
     const userId = req.user.id;
 
-    logger.info(`Excluindo mensagem pré-definida ${messageId}`);
 
     const { error } = await supabase
       .from('predefined_messages')
@@ -141,7 +133,6 @@ export async function deletePredefinedMessage(req, res) {
       throw error;
     }
 
-    logger.info(`Mensagem pré-definida excluída: ${messageId}`);
     res.json({ message: 'Mensagem pré-definida excluída com sucesso' });
   } catch (error) {
     logger.error('Erro ao excluir mensagem pré-definida:', error);

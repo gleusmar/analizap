@@ -18,7 +18,6 @@ import QRCode from 'qrcode';
  */
 export async function connect(req, res) {
   try {
-    logger.info('Solicitação de conexão WhatsApp recebida');
 
     const socket = getSocket();
 
@@ -36,14 +35,11 @@ export async function connect(req, res) {
     // Se não fornecido, usa configurações do banco
     const { syncPeriodDays } = req.body;
 
-    logger.info(`Período de sincronização fornecido: ${syncPeriodDays}`);
 
     // Verifica se existe sessão salva para reconectar automaticamente
     const hasSavedSession = await hasSessionSaved();
-    logger.info(`Sessão salva encontrada: ${hasSavedSession}`);
 
     if (hasSavedSession) {
-      logger.info('Tentando reconectar usando sessão salva...');
       // Se for reconectar, usa configurações do banco (syncPeriodDays = null)
       await reconnectWithSavedSession('default', syncPeriodDays);
       res.json({
@@ -52,7 +48,6 @@ export async function connect(req, res) {
         status: getConnectionStatus()
       });
     } else {
-      logger.info('Nenhuma sessão salva, criando nova conexão...');
       // Cria o socket com o período de sincronização fornecido (ou do banco se null)
       await createWhatsAppSocket('default', syncPeriodDays);
       res.json({
@@ -72,7 +67,6 @@ export async function connect(req, res) {
  */
 export async function disconnect(req, res) {
   try {
-    logger.info('Solicitação de desconexão WhatsApp recebida');
 
     const socket = getSocket();
 
@@ -151,7 +145,6 @@ export async function getQR(req, res) {
  */
 export async function refreshQR(req, res) {
   try {
-    logger.info('Solicitação de atualização de QR Code recebida');
 
     const socket = getSocket();
 
@@ -187,7 +180,6 @@ export async function refreshQR(req, res) {
  */
 export async function removeSessionController(req, res) {
   try {
-    logger.info('Solicitação de remoção de sessão recebida');
 
     await removeSession();
 
@@ -225,7 +217,6 @@ export async function saveSyncSettings(req, res) {
   try {
     const { syncHistory, syncPeriodDays } = req.body;
 
-    logger.info('Salvando configurações de sincronização:', { syncHistory, syncPeriodDays });
 
     await saveSyncSettingsExport(syncHistory, syncPeriodDays);
 

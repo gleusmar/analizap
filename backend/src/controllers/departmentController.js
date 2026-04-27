@@ -15,7 +15,6 @@ export const departmentController = {
 
       if (error) throw error;
 
-      logger.info('Departamentos listados', { count: data.length }, req.user?.id, 'DEPARTMENTS_LIST', req);
       res.json(data);
     } catch (error) {
       logger.error('Erro ao listar departamentos', { error: error.message }, req.user?.id, 'DEPARTMENTS_LIST_ERROR', req);
@@ -74,7 +73,6 @@ export const departmentController = {
 
       if (error) throw error;
 
-      logger.info('Departamento criado', { name, id: data.id }, req.user?.id, 'DEPARTMENT_CREATED', req);
       res.status(201).json(data);
     } catch (error) {
       logger.error('Erro ao criar departamento', { error: error.message }, req.user?.id, 'DEPARTMENT_CREATE_ERROR', req);
@@ -109,7 +107,6 @@ export const departmentController = {
         return res.status(404).json({ error: 'Departamento não encontrado' });
       }
 
-      logger.info('Departamento atualizado', { id, name: data.name }, req.user?.id, 'DEPARTMENT_UPDATED', req);
       res.json(data);
     } catch (error) {
       logger.error('Erro ao atualizar departamento', { error: error.message }, req.user?.id, 'DEPARTMENT_UPDATE_ERROR', req);
@@ -141,7 +138,6 @@ export const departmentController = {
 
       if (error) throw error;
 
-      logger.info('Departamento excluído', { id }, req.user?.id, 'DEPARTMENT_DELETED', req);
       res.json({ success: true });
     } catch (error) {
       logger.error('Erro ao excluir departamento', { error: error.message }, req.user?.id, 'DEPARTMENT_DELETE_ERROR', req);

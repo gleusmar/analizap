@@ -50,7 +50,6 @@ export const rateLimit = (options = {}) => {
 
     // Verificar limite
     if (data.count > max) {
-      logger.warn('Rate limit excedido', {
         ip: key,
         endpoint: req.path,
         count: data.count,
@@ -65,7 +64,6 @@ export const rateLimit = (options = {}) => {
 
     // Log de requisição (opcional, pode ser verboso)
     if (!skipSuccessfulRequests) {
-      logger.info(`Request: ${req.method} ${req.path}`, {
         ip: key,
         count: data.count,
         remaining: max - data.count

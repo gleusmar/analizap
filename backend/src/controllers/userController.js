@@ -33,7 +33,6 @@ export const userController = {
         return userWithoutPassword;
       });
 
-      logger.info('Usuários listados', { count: usersWithoutPassword.length }, req.user?.id, 'USERS_LIST', req);
       res.json(usersWithoutPassword);
     } catch (error) {
       logger.error('Erro ao listar usuários', { error: error.message }, req.user?.id, 'USERS_LIST_ERROR', req);
@@ -130,7 +129,6 @@ export const userController = {
 
       if (error) throw error;
 
-      logger.info('Usuário criado', { email, name, id: data.id }, req.user?.id, 'USER_CREATED', req);
       res.status(201).json(data);
     } catch (error) {
       logger.error('Erro ao criar usuário', { error: error.message }, req.user?.id, 'USER_CREATE_ERROR', req);
@@ -192,7 +190,6 @@ export const userController = {
         return res.status(404).json({ error: 'Usuário não encontrado' });
       }
 
-      logger.info('Usuário atualizado', { id, name: data.name }, req.user?.id, 'USER_UPDATED', req);
       res.json(data);
     } catch (error) {
       logger.error('Erro ao atualizar usuário', { error: error.message }, req.user?.id, 'USER_UPDATE_ERROR', req);
@@ -221,7 +218,6 @@ export const userController = {
 
       if (error) throw error;
 
-      logger.info('Usuário excluído', { id }, req.user?.id, 'USER_DELETED', req);
       res.json({ success: true });
     } catch (error) {
       logger.error('Erro ao excluir usuário', { error: error.message }, req.user?.id, 'USER_DELETE_ERROR', req);
@@ -264,7 +260,6 @@ export const userController = {
         .update({ is_active: false })
         .eq('user_id', id);
 
-      logger.info('Senha de usuário resetada', { id, email: data.email }, req.user?.id, 'USER_PASSWORD_RESET', req);
       res.json({ success: true, message: 'Senha resetada com sucesso' });
     } catch (error) {
       logger.error('Erro ao resetar senha', { error: error.message }, req.user?.id, 'USER_PASSWORD_RESET_ERROR', req);
@@ -308,7 +303,6 @@ export const userController = {
 
       if (error) throw error;
 
-      logger.info('Status de usuário alterado', { id, is_active: newStatus }, req.user?.id, 'USER_STATUS_CHANGED', req);
       res.json(data);
     } catch (error) {
       logger.error('Erro ao alterar status do usuário', { error: error.message }, req.user?.id, 'USER_STATUS_CHANGE_ERROR', req);

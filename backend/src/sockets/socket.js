@@ -8,8 +8,6 @@ let io = null;
  * Inicializa o Socket.io
  */
 export function initializeSocket(server) {
-  logger.info('🚀 Inicializando Socket.io...');
-
   io = new Server(server, {
     cors: {
       origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -24,13 +22,6 @@ export function initializeSocket(server) {
   setSocketIO(io);
 
   io.on('connection', (socket) => {
-    logger.info(`👤 Cliente conectado: ${socket.id}`);
-
-    socket.on('disconnect', () => {
-      logger.info(`👤 Cliente desconectado: ${socket.id}`);
-    });
-
-    // Eventos personalizados podem ser adicionados aqui
   });
 
   logger.info('✅ Socket.io inicializado com sucesso');
@@ -50,8 +41,6 @@ export function getIO() {
 export function emit(event, data) {
   if (io) {
     io.emit(event, data);
-  } else {
-    logger.warn('Socket.io não está inicializado');
   }
 }
 
@@ -61,7 +50,5 @@ export function emit(event, data) {
 export function emitTo(socketId, event, data) {
   if (io) {
     io.to(socketId).emit(event, data);
-  } else {
-    logger.warn('Socket.io não está inicializado');
   }
 }

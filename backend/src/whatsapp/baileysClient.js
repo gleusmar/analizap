@@ -35,7 +35,6 @@ async function saveAuthToDB(creds) {
   try {
     // Não salvar se creds for null ou undefined
     if (!creds) {
-      logger.warn('Creds é null/undefined, não salvando no banco');
       return;
     }
 
@@ -53,8 +52,6 @@ async function saveAuthToDB(creds) {
       logger.error('Erro ao salvar auth no banco:', error);
       throw error;
     }
-
-    logger.info('Auth salvo no banco com sucesso');
   } catch (error) {
     logger.error('Erro ao salvar auth no banco:', error);
     throw error;
@@ -71,7 +68,6 @@ async function loadAuthFromDB() {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        logger.info('Nenhuma sessão salva no banco');
         return null;
       }
       logger.error('Erro ao carregar auth do banco:', error);
@@ -79,7 +75,6 @@ async function loadAuthFromDB() {
     }
 
     if (data) {
-      logger.info('Auth carregado do banco com sucesso');
       return data.creds;
     }
 
@@ -108,8 +103,6 @@ async function saveSyncSettings(syncHistoryParam, syncPeriodDaysParam) {
       logger.error('Erro ao salvar configurações de sincronização no banco:', error);
       throw error;
     }
-
-    logger.info('Configurações de sincronização salvas no banco com sucesso');
   } catch (error) {
     logger.error('Erro ao salvar configurações de sincronização no banco:', error);
     throw error;
@@ -126,7 +119,6 @@ async function loadSyncSettings() {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        logger.info('Nenhuma configuração de sincronização salva no banco, usando padrões');
         return { sync_history: false, sync_period_days: 7 };
       }
       logger.error('Erro ao carregar configurações de sincronização do banco:', error);
@@ -134,10 +126,6 @@ async function loadSyncSettings() {
     }
 
     if (data) {
-      logger.info('Configurações de sincronização carregadas do banco com sucesso', {
-        sync_history: data.sync_history,
-        sync_period_days: data.sync_period_days
-      });
       return {
         sync_history: data.sync_history,
         sync_period_days: data.sync_period_days
@@ -215,8 +203,6 @@ async function deleteAllKeysFromDB() {
       logger.error('Erro ao deletar keys do banco:', error);
       throw error;
     }
-
-    logger.info('Keys deletadas do banco com sucesso');
   } catch (error) {
     logger.error('Erro ao deletar keys do banco:', error);
     throw error;
@@ -301,7 +287,6 @@ const __dirname = path.dirname(__filename);
  */
 export function setSocketIO(socketIOInstance) {
   io = socketIOInstance;
-  logger.info('🔌 Socket.io instância definida no baileysClient');
 }
 
 /**
@@ -309,12 +294,6 @@ export function setSocketIO(socketIOInstance) {
  */
 export async function createWhatsAppSocket(sessionIdParam = 'default', syncPeriodDaysParam = null) {
   sessionId = sessionIdParam;
-
-  logger.info('🚀 createWhatsAppSocket chamado', {
-    sessionId,
-    syncPeriodDaysParam,
-    sockExists: !!sock
-  });
 
   try {
     // Carrega configurações de sincronização do banco
@@ -348,7 +327,6 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     const hasFile = fs.existsSync(authPath);
 
     if (savedCreds && !hasFile) {
-      logger.info('Sessão salva encontrada no banco, restaurando para o sistema de arquivos...');
       // Cria o diretório se não existir
       fs.mkdirSync(authPath, { recursive: true });
       
@@ -366,7 +344,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
         }
       }
       
-      logger.info('Sessão restaurada do banco para o sistema de arquivos com sucesso');
+      logger.info('Sessão restaurada do banco para o sistema de arquivos');
     }
 
     const authStateResult = await useMultiFileAuthState(authPath);
@@ -387,7 +365,6 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
 
     // Fetch the latest version of WA Web and Baileys
     const { version, isLatest } = await fetchLatestBaileysVersion();
-    logger.info(`Usando WA v${version.join('.')}, isLatest: ${isLatest}`);
 
     // Configuração do logger
     const loggerBaileys = pino({
@@ -412,15 +389,11 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     });
 
     // Configura eventos
-    logger.info('📡 Chamando setupEvents...');
     setupEvents(sock);
-    logger.info('✅ setupEvents chamado com sucesso');
 
-    logger.info('Socket WhatsApp criado com sucesso');
     return sock;
   } catch (error) {
     logger.error('Erro ao criar socket WhatsApp:', error.message);
-    logger.error('Stack:', error.stack);
     throw error;
   }
 }
@@ -429,17 +402,10 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
  * Configura os eventos do socket
  */
 function setupEvents(socket) {
-  logger.info('🎯 Configurando eventos do socket WhatsApp...');
-  logger.info('📡 Socket disponível:', !!socket);
-  logger.info('📡 Socket type:', typeof socket);
+  logger.info('Configurando eventos do socket WhatsApp');
 
   // Evento de atualização da conexão
   socket.ev.on('connection.update', async (update) => {
-    logger.info('🔌 Evento connection.update:', {
-      connection: update.connection,
-      hasQR: !!update.qr,
-      isNewLogin: update.isNewLogin
-    });
     const { connection, lastDisconnect, isNewLogin, qr } = update;
 
     if (qr) {
@@ -454,16 +420,6 @@ function setupEvents(socket) {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
-
-      // Log detalhado do motivo da desconexão
-      logger.info('Conexão fechada:', {
-        statusCode,
-        error: lastDisconnect?.error?.message,
-        isBoom: lastDisconnect?.error instanceof Boom,
-        DisconnectReason_loggedOut: DisconnectReason.loggedOut,
-        DisconnectReason_badSession: DisconnectReason.badSession,
-        DisconnectReason_forbidden: DisconnectReason.forbidden
-      });
 
       // Determinar se deve reconectar baseado no DisconnectReason
       let shouldReconnect = true;
@@ -495,8 +451,6 @@ function setupEvents(socket) {
         reason = `Erro desconhecido (statusCode: ${statusCode})`;
       }
 
-      logger.info(`Motivo da desconexão: ${reason}, Reconectar: ${shouldReconnect}`);
-
       if (shouldReconnect) {
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
           logger.error(`Máximo de tentativas de reconexão atingido (${MAX_RECONNECT_ATTEMPTS})`);
@@ -509,7 +463,6 @@ function setupEvents(socket) {
         const delay = BASE_DELAY * Math.pow(2, reconnectAttempts);
         reconnectAttempts++;
 
-        logger.info(`Tentando reconectar em ${delay}ms (tentativa ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
         connectionStatus = 'connecting';
         emitConnectionStatus('connecting');
 
@@ -517,7 +470,6 @@ function setupEvents(socket) {
           createWhatsAppSocket(sessionId);
         }, delay);
       } else {
-        logger.info('Conexão encerrada permanentemente');
         connectionStatus = 'disconnected';
         qrCode = null;
         emitConnectionStatus('disconnected');
@@ -528,9 +480,6 @@ function setupEvents(socket) {
         }
       }
     } else if (connection === 'open') {
-      logger.info('🟢🟢🟢🟢🟢 CONEXÃO ABERTA - SISTEMA PRONTO PARA RECEBER MENSAGENS', {
-        timestamp: new Date().toISOString()
-      });
       connectionStatus = 'connected';
       qrCode = null;
       reconnectAttempts = 0; // Reset contador de tentativas
@@ -552,7 +501,6 @@ function setupEvents(socket) {
 
   // Evento de credenciais atualizadas
   socket.ev.on('creds.update', async () => {
-    logger.info('Credenciais atualizadas');
     await saveAuthState(authState);
   });
 
@@ -568,8 +516,6 @@ function setupEvents(socket) {
     const remoteJid = message.key.remoteJid;
     const messageTimestamp = message.messageTimestamp;
     const uniqueId = await getMessageUniqueId(message);
-
-    logger.info('Processando mensagem enviada por nós:', { messageId, uniqueId });
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
@@ -595,14 +541,6 @@ function setupEvents(socket) {
       .single();
 
     if (existingMessage) {
-      logger.info('Mensagem já existe (message_id ou real_message_id), atualizando status:', {
-        messageId,
-        uniqueId,
-        existingMessageId: existingMessage.id,
-        existingMessageId: existingMessage.message_id,
-        existingRealMessageId: existingMessage.real_message_id
-      });
-
       // Atualizar status para entregue se necessário
       await supabase
         .from('messages')
@@ -635,12 +573,6 @@ function setupEvents(socket) {
     }
 
     if (tempMessage) {
-      logger.info('Mensagem temporária encontrada, atualizando message_id e real_message_id:', {
-        tempMessageId: tempMessage.message_id,
-        realMessageId: messageId,
-        conversationId: tempMessage.conversation_id
-      });
-
       // Atualizar message_id e real_message_id em background
       await supabase
         .from('messages')
@@ -651,20 +583,13 @@ function setupEvents(socket) {
         })
         .eq('id', tempMessage.id);
 
-      logger.info('Mensagem temporária atualizada com message_id real em background:', {
-        tempMessageId: tempMessage.message_id,
-        realMessageId: messageId
-      });
       // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
 
       return; // Não processar novamente
     }
 
-    logger.info('Processando mensagem enviada (não encontrou temporária):', { messageId, remoteJid });
-
     // Verificar se é mensagem de protocolo antes de processar
     if (message.message && message.message.protocolMessage) {
-      logger.info('Mensagem de protocolo enviada, ignorando:', { messageId });
       return;
     }
 
@@ -673,19 +598,12 @@ function setupEvents(socket) {
 
     const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
-    logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
-
     // Se a mensagem foi processada, atualiza para garantir que é from_me = true
     if (processedMessage) {
       await supabase
         .from('messages')
         .update({ from_me: true })
         .eq('message_id', messageId);
-
-      logger.info('Mensagem enviada processada e salva no banco (não emitindo para evitar duplicação):', {
-        messageId,
-        conversation_id: processedMessage.conversation_id
-      });
 
       // Não emitir whatsapp:message para mensagens enviadas - o endpoint /send já emitiu a temporária
       // e o message_id foi atualizado em background
@@ -699,11 +617,6 @@ function setupEvents(socket) {
           const { processMessageMedia } = await import('../services/mediaService.js');
           processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
             .then(async (publicUrl) => {
-              logger.info('Mídia processada com sucesso, atualizando mensagem:', {
-                messageId: processedMessage.message_id,
-                messageType: messageTypeSaved,
-                publicUrl
-              });
 
               // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
               // Verificar se o conteúdo já é uma URL (já foi processado)
@@ -717,10 +630,6 @@ function setupEvents(socket) {
               const isAlreadyUrl = currentMessage?.content?.startsWith('http');
 
               if (isAlreadyUrl) {
-                logger.info('Mídia já processada, ignorando atualização:', {
-                  messageId: processedMessage.message_id,
-                  currentContent: currentMessage?.content
-                });
               } else {
                 const { error } = await supabase
                   .from('messages')
@@ -730,7 +639,6 @@ function setupEvents(socket) {
                 if (error) {
                   logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
                 } else {
-                  logger.info('Mensagem atualizada com URL da mídia no banco');
                   // Emitir evento de atualização de mensagem quando a mídia for processada
                   if (io) {
                     io.emit('whatsapp:message_updated', {
@@ -751,110 +659,21 @@ function setupEvents(socket) {
   }
 
   // Evento de atualização de mensagens
-  logger.info('📝 Registrando evento messages.upsert...');
-
-  // Adicionar listeners para todos os eventos do Baileys para debug
-  socket.ev.on('connection.update', (update) => {
-    logger.info('🔌 CONNECTION.UPDATE:', {
-      connection: update.connection,
-      qr: !!update.qr,
-      lastDisconnect: update.lastDisconnect?.error?.message,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('creds.update', () => {
-    logger.info('🔑 CREDS.UPDATE - Credenciais atualizadas');
-  });
-
-  // Adicionar listener para messages.update (para debug)
-  socket.ev.on('messages.update', (updates) => {
-    logger.info('📨📨 EVENTO MESSAGES.UPDATE RECEBIDO:', {
-      count: updates.length,
-      timestamp: new Date().toISOString(),
-      updates: updates.slice(0, 3).map(u => ({
-        key: u.key,
-        update: Object.keys(u.update)
-      }))
-    });
-  });
-
-  // Adicionar listener para chat.update (para debug)
-  socket.ev.on('chats.update', (updates) => {
-    logger.info('💬 EVENTO CHATS.UPDATE RECEBIDO:', {
-      count: updates.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('chats.upsert', (chats) => {
-    logger.info('💬💬 EVENTO CHATS.UPSERT RECEBIDO:', {
-      count: chats.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('chats.delete', (chats) => {
-    logger.info('💬❌ EVENTO CHATS.DELETE RECEBIDO:', {
-      count: chats.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('messages.delete', (deletions) => {
-    logger.info('📨❌ EVENTO MESSAGES.DELETE RECEBIDO:', {
-      count: deletions.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('presence.update', (presences) => {
-    logger.info('👤 EVENTO PRESENCE.UPDATE RECEBIDO:', {
-      count: Object.keys(presences).length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('groups.upsert', (groups) => {
-    logger.info('👥 EVENTO GROUPS.UPSERT RECEBIDO:', {
-      count: groups.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
-  socket.ev.on('groups.update', (updates) => {
-    logger.info('👥 EVENTO GROUPS.UPDATE RECEBIDO:', {
-      count: updates.length,
-      timestamp: new Date().toISOString()
-    });
-  });
-
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.info('📨📨📨📨📨 EVENTO MESSAGES.UPSERT RECEBIDO:', {
-      messageCount: messages.length,
+    logger.info('messages.upsert recebido:', {
       type,
-      timestamp: new Date().toISOString(),
-      messages: messages.map(m => ({
-        id: m.key?.id,
-        remoteJid: m.key?.remoteJid,
-        fromMe: m.key?.fromMe,
-        hasMessage: !!m.message,
-        messageKeys: m.message ? Object.keys(m.message) : []
-      }))
+      count: messages.length,
+      messages: messages
     });
 
     // Se é histórico (append), usa batching
     if (type === 'append' || messages.length > 10) {
-      logger.info('📦 Usando batching para mensagens:', { count: messages.length, type });
       for (const message of messages) {
         // Não adicionar mensagens enviadas por nós ao batching - elas são processadas separadamente
         if (!message.key.fromMe) {
           // Adicionar ao batch (processar mesmo notify sem conteúdo)
           addToMessageBatch(message, type);
         } else {
-          logger.info('Mensagem enviada por nós não adicionada ao batching, processando separadamente:', {
-            messageId: message.key?.id
-          });
           // Processar mensagem enviada por nós individualmente
           await processSentMessage(message, syncPeriodDays);
         }
@@ -866,13 +685,6 @@ function setupEvents(socket) {
     for (const message of messages) {
       const isFromMe = message.key.fromMe;
       const uniqueId = await getMessageUniqueId(message);
-      logger.info('🔍 Processando mensagem individual:', {
-        messageId: message.key?.id,
-        uniqueId,
-        isFromMe,
-        type,
-        remoteJid: message.key?.remoteJid
-      });
 
       if (isFromMe) {
         // Mensagem enviada por nós - processar sempre (notify e append)
@@ -887,65 +699,28 @@ function setupEvents(socket) {
         // Se tiver conteúdo, verificar se já foi processada anteriormente
         if (hasContent) {
           const alreadyExists = await checkMessageExists(uniqueId);
-          if (alreadyExists) {
-            logger.info('⏭️ Mensagem recebida com notify já processada anteriormente, ignorando:', {
-              messageId: message.key?.id,
-              uniqueId
-            });
-          } else {
-            logger.info('📨 Mensagem recebida com notify e conteúdo, processando:', {
-              messageId: message.key?.id,
-              remoteJid: message.key?.remoteJid
-            });
+          if (!alreadyExists) {
             await handleIncomingMessage(message, true); // true = processar
           }
         } else {
           // Sem conteúdo - processar mesmo assim (pode ser append depois)
-          logger.warn('📨 Mensagem recebida com notify sem conteúdo, processando mesmo assim:', {
-            messageId: message.key?.id,
-            remoteJid: message.key?.remoteJid
-          });
           await handleIncomingMessage(message, true); // true = processar
         }
       } else if (!isFromMe && type === 'append') {
         // Mensagem recebida com append - verificar se já foi processada pelo notify
-        // Se foi processada pelo notify, ignorar o append para evitar duplicação
+        // Se foi processado pelo notify, ignorar o append para evitar duplicação
         const wasProcessedByNotify = await checkMessageExists(uniqueId);
-        if (wasProcessedByNotify) {
-          logger.info('⏭️ Mensagem recebida com append já processada pelo notify, ignorando:', {
-            messageId: message.key?.id,
-            uniqueId
-          });
-        } else {
-          logger.info('📨 Mensagem recebida com append (não processada pelo notify), processando:', {
-            messageId: message.key?.id,
-            remoteJid: message.key?.remoteJid
-          });
+        if (!wasProcessedByNotify) {
           await handleIncomingMessage(message, true); // true = processar
         }
       } else if (!isFromMe && type !== 'append') {
         // Mensagem recebida com outro tipo - verificar duplicação antes de processar
         const wasProcessed = await checkMessageExists(uniqueId);
-        if (wasProcessed) {
-          logger.info('⏭️ Mensagem recebida (outro tipo) já processada, ignorando:', {
-            messageId: message.key?.id,
-            uniqueId,
-            type
-          });
-        } else {
-          logger.info('📨 Mensagem recebida (outro tipo), processando:', {
-            messageId: message.key?.id,
-            remoteJid: message.key?.remoteJid,
-            type
-          });
+        if (!wasProcessed) {
           await handleIncomingMessage(message, true); // true = processar
         }
       } else {
-        logger.info('⏭️ Mensagem ignorada (append será processado pelo batching):', {
-          messageId: message.key?.id,
-          isFromMe,
-          type
-        });
+        // Mensagem ignorada (append será processado pelo batching)
       }
     }
   });
@@ -955,59 +730,39 @@ function setupEvents(socket) {
     for (const update of updates) {
       const { key, update: updateData } = update;
       const messageId = key.id;
-      const remoteJid = key.remoteJid;
-
-      logger.info('Atualização de status de mensagem recebida:', { 
-        messageId, 
-        remoteJid, 
-        status: updateData.status,
-        fromMe: key.fromMe 
-      });
 
       // Status 2 = sent/received, Status 3 = delivered, Status 4 = read
       if (updateData.status === 4) {
-        // Mensagem lida
-        logger.info('Marcando mensagem como lida:', messageId);
         try {
           await updateMessageStatus(messageId, 'read');
           
           // Emitir evento para o frontend
           if (io) {
-            logger.info('Emitindo evento whatsapp:message_status (read) para o frontend:', { messageId });
             io.emit('whatsapp:message_status', {
               message_id: messageId,
               status: 'read'
             });
-            logger.info('Evento whatsapp:message_status (read) emitido com sucesso');
-          } else {
-            logger.warn('Socket.io não disponível para emitir status');
           }
         } catch (error) {
           logger.error('Erro ao marcar mensagem como lida:', error);
         }
       } else if (updateData.status === 3) {
         // Mensagem entregue
-        logger.info('Marcando mensagem como entregue:', messageId);
         try {
           await updateMessageStatus(messageId, 'delivered');
           
           // Emitir evento para o frontend
           if (io) {
-            logger.info('Emitindo evento whatsapp:message_status (delivered) para o frontend:', { messageId });
             io.emit('whatsapp:message_status', {
               message_id: messageId,
               status: 'delivered'
             });
-            logger.info('Evento whatsapp:message_status (delivered) emitido com sucesso');
-          } else {
-            logger.warn('Socket.io não disponível para emitir status');
           }
         } catch (error) {
           logger.error('Erro ao marcar mensagem como entregue:', error);
         }
       } else if (updateData.status === 2) {
         // Mensagem enviada/recebida pelo servidor
-        logger.info('Mensagem enviada ao servidor:', messageId);
         // Não atualizamos o banco para status 2, mas emitimos evento para o frontend
         if (io) {
           io.emit('whatsapp:message_status', {
@@ -1040,7 +795,6 @@ function setupEvents(socket) {
 
         if (mapping) {
           finalPhone = mapping.phone;
-          logger.info('LID mapeado para phone em savePresenceToDB:', { lid: phone, phone: finalPhone });
         }
       }
 
@@ -1057,8 +811,6 @@ function setupEvents(socket) {
 
       if (error) {
         logger.error('Erro ao salvar presença no banco:', error);
-      } else {
-        logger.info('Presença salva no banco:', { phone: finalPhone, presence, lastSeenAt });
       }
     } catch (error) {
       logger.error('Erro ao salvar presença no banco:', error);
@@ -1067,18 +819,11 @@ function setupEvents(socket) {
 
   // Evento de atualização de presença
   socket.ev.on('presence.update', async (updates) => {
-    logger.info('📍 presence.update recebido:', { 
-      type: typeof updates, 
-      hasUpdates: !!updates,
-      updates: JSON.stringify(updates).substring(0, 500)
-    });
-
     // O formato pode ser: { id: string, presences: { [jid]: { lastKnownPresence: string } } }
     // ou array de objetos com mesmo formato
     let updatesArray = [];
 
     if (!updates) {
-      logger.warn('presence.update recebido sem dados');
       return;
     }
 
@@ -1088,7 +833,6 @@ function setupEvents(socket) {
       // Formato de objeto único
       updatesArray = [updates];
     } else {
-      logger.warn('presence.update com formato desconhecido:', typeof updates);
       return;
     }
 
@@ -1112,13 +856,10 @@ function setupEvents(socket) {
 
         if (mapping) {
           phone = mapping.phone;
-          logger.info('LID mapeado para phone em presence.update:', { lid: id, phone });
         }
       }
 
       for (const [jid, presence] of Object.entries(presences)) {
-        logger.info('Atualização de presença recebida:', { phone, jid, presence });
-
         // Salvar no banco de dados
         await savePresenceToDB(phone, presence.lastKnownPresence);
 
@@ -1129,7 +870,6 @@ function setupEvents(socket) {
             presence: presence.lastKnownPresence,
             last_seen: presence.lastKnownPresence === 'unavailable' ? new Date().toISOString() : null
           });
-          logger.info('Evento whatsapp:presence_update emitido para o frontend:', { phone, presence: presence.lastKnownPresence });
         }
       }
     }
@@ -1141,8 +881,6 @@ function setupEvents(socket) {
     if (!messages || messages.length === 0) {
       return;
     }
-    
-    logger.info(`Processando ${messages.length} mensagens do histórico`);
     
     // Processar histórico com batching
     for (const message of messages) {
@@ -1178,8 +916,6 @@ function setupEvents(socket) {
       await handleContactUpdate(contact);
     }
   });
-
-  logger.info('✅ Todos os eventos do socket WhatsApp foram configurados');
 }
 
 /**
@@ -1189,7 +925,6 @@ async function saveAuthState(state) {
   try {
     if (saveCredsFunction && state) {
       await saveCredsFunction(state.creds);
-      logger.info('Auth state salvo');
     }
   } catch (error) {
     logger.error('Erro ao salvar auth state:', error);
@@ -1253,13 +988,11 @@ async function processMessageBatch() {
           .single();
 
         if (existingMessage) {
-          logger.info('Mensagem append já existe, ignorando:', { messageId, uniqueId });
           continue;
         }
       }
 
       // Para notify, processar sempre (é mensagem nova em tempo real)
-      logger.info('Processando mensagem no batch:', { messageId, uniqueId, type });
 
       // Processar mensagem (processWhatsAppMessage vai criar a conversa se necessário)
       const { processWhatsAppMessage } = await import('../services/messageService.js');
@@ -1275,23 +1008,11 @@ async function processMessageBatch() {
       const messageTime = message.messageTimestamp * 1000;
       const isRecent = Date.now() - messageTime < 5 * 60 * 1000;
 
-      logger.info('📤 Verificando se deve emitir whatsapp:message:', {
-        messageId,
-        conversation_id: processedMessage.conversation_id,
-        messageTime: new Date(messageTime).toISOString(),
-        isRecent,
-        hasIo: !!io
-      });
-
       if (isRecent && io) {
-        logger.info('📤 Emitindo whatsapp:message para conversa:', processedMessage.conversation_id);
         io.emit('whatsapp:message', {
           conversation_id: processedMessage.conversation_id,
           message: processedMessage
         });
-        logger.info('✅ Evento whatsapp:message emitido com sucesso');
-      } else {
-        logger.warn('⚠️ Não emitindo whatsapp:message:', { isRecent, hasIo });
       }
 
       // Delay entre mensagens para não sobrecarregar o Supabase
@@ -1409,12 +1130,10 @@ async function checkMessageExists(uniqueId) {
 
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = not found, que é esperado
-      logger.warn('Erro ao verificar existência de mensagem:', error.message);
     }
 
     return !!data;
   } catch (error) {
-    logger.warn('Erro ao verificar existência de mensagem:', error.message);
     return false;
   }
 }
@@ -1441,15 +1160,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
 
-    logger.info('📥 handleIncomingMessage chamada:', {
-      messageId: key?.id,
-      remoteJid,
-      hasMessage: !!msg,
-      pushName,
-      messageKeys: msg ? Object.keys(msg) : [],
-      isGroupOrBroadcast: isGroupOrBroadcast(remoteJid)
-    });
-
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
       return;
@@ -1457,7 +1167,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
 
     // Verificar se a mensagem tem conteúdo válido
     if (!msg || Object.keys(msg).length === 0) {
-      logger.warn('Mensagem sem conteúdo válido, ignorando:', { messageId: key?.id, remoteJid });
       return;
     }
 
@@ -1509,8 +1218,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
       return; // Não processar como mensagem normal
     }
 
-    logger.info('🔤 Tipo de mensagem determinada:', { messageType, isCall: !!msg.call });
-
     const phone = remoteJid.split('@')[0];
     const messageId = key.id;
 
@@ -1518,10 +1225,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     const isMedia = msg.imageMessage || msg.audioMessage || msg.videoMessage ||
                     msg.documentMessage || msg.stickerMessage;
 
-    logger.info('📦 Verificando isMedia:', { isMedia });
-
     // Extrair informações básicas da mensagem para emitir imediatamente (apenas para texto)
-    logger.info('💬 Chamando getOrCreateConversation...');
     const conversation = await getOrCreateConversation(
       remoteJid,
       pushName || null,
@@ -1531,14 +1235,8 @@ async function handleIncomingMessage(message, shouldProcess = true) {
       messageTimestamp // passa timestamp para verificar período de sincronização
     );
 
-    logger.info('📋 Conversa obtida/criada:', {
-      conversationId: conversation?.id,
-      conversationPhone: conversation?.phone
-    });
-
     // Emitir mensagem temporária apenas para mensagens de texto (não para mídia)
     if (io && conversation && !isMedia) {
-      logger.info('📤 Emitindo mensagem temporária para o frontend...');
       const tempMessage = {
         id: null, // Será preenchido após salvar
         message_id: messageId,
@@ -1556,13 +1254,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
         message: tempMessage,
         is_temp: true // Flag para indicar que é mensagem temporária
       });
-      logger.info('✅ Mensagem temporária emitida com sucesso');
-    } else {
-      logger.info('⏭️ Não emitindo mensagem temporária:', {
-        hasIo: !!io,
-        hasConversation: !!conversation,
-        isMedia
-      });
     }
 
     // Processa e salva a mensagem no banco de dados em background (não await)
@@ -1574,17 +1265,8 @@ async function handleIncomingMessage(message, shouldProcess = true) {
         // Se tiver mídia, processa em background antes de emitir o evento
         if (message.message) {
           const messageTypeSaved = savedMessage.message_type;
-          logger.info('🔍 Verificando se precisa processar mídia:', {
-            messageId: savedMessage.message_id,
-            messageType: messageTypeSaved,
-            hasMessage: !!message.message
-          });
           if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
                MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
-            logger.info('🚀 Iniciando processamento de mídia em background antes de emitir evento:', {
-              messageId: savedMessage.message_id,
-              messageType: messageTypeSaved
-            });
             processMessageMedia(sock, message, messageTypeSaved, savedMessage.message_id)
               .then(async (publicUrl) => {
                 const { createClient } = await import('@supabase/supabase-js');
@@ -1601,7 +1283,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
                 if (error) {
                   logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
                 } else {
-                  logger.info('Mídia processada, buscando mensagem atualizada para emitir evento');
                   // Buscar mensagem atualizada com a URL da mídia
                   const { data: updatedMessage } = await supabase
                     .from('messages')
@@ -1611,16 +1292,11 @@ async function handleIncomingMessage(message, shouldProcess = true) {
 
                   // Emitir evento com a mensagem completa (incluindo URL da mídia)
                   if (io && updatedMessage) {
-                    logger.info('📤 Emitindo whatsapp:message com mídia processada:', {
-                      conversation_id: savedMessage.conversation_id,
-                      message_id: savedMessage.message_id
-                    });
                     io.emit('whatsapp:message', {
                       conversation_id: savedMessage.conversation_id,
                       message: updatedMessage,
                       is_temp: false
                     });
-                    logger.info('✅ Evento whatsapp:message com mídia emitido com sucesso');
                   }
                 }
               })
@@ -1628,10 +1304,6 @@ async function handleIncomingMessage(message, shouldProcess = true) {
                 logger.error('Erro ao processar mídia:', error);
                 // Se falhar ao processar mídia, emite evento mesmo assim com a mensagem original
                 if (io) {
-                  logger.info('📤 Emitindo whatsapp:message (fallback após erro de mídia):', {
-                    conversation_id: savedMessage.conversation_id,
-                    message_id: savedMessage.message_id
-                  });
                   io.emit('whatsapp:message', {
                     conversation_id: savedMessage.conversation_id,
                     message: savedMessage,
@@ -1645,16 +1317,11 @@ async function handleIncomingMessage(message, shouldProcess = true) {
 
         // Para mensagens sem mídia (ou se não for mídia), emite o evento imediatamente
         if (io) {
-          logger.info('📤 Emitindo whatsapp:message (não batch, sem mídia):', {
-            conversation_id: savedMessage.conversation_id,
-            message_id: savedMessage.message_id
-          });
           io.emit('whatsapp:message', {
             conversation_id: savedMessage.conversation_id,
             message: savedMessage,
             is_temp: false
           });
-          logger.info('✅ Evento whatsapp:message (não batch) emitido com sucesso');
         }
       })
       .catch(error => {
@@ -1664,15 +1331,9 @@ async function handleIncomingMessage(message, shouldProcess = true) {
   } catch (error) {
     // Tratar erro de Bad MAC silenciosamente (erro de criptografia comum do Baileys)
     if (error.message && error.message.includes('Bad MAC')) {
-      logger.warn('Erro de criptografia (Bad MAC) - ignorando mensagem');
       return;
     }
-    logger.error('❌ Erro ao tratar mensagem recebida:', {
-      error: error.message,
-      stack: error.stack,
-      messageId: message?.key?.id,
-      remoteJid: message?.key?.remoteJid
-    });
+    logger.error('Erro ao tratar mensagem recebida:', error);
   }
 }
 
@@ -1801,13 +1462,11 @@ export function getQRCode() {
 export async function disconnectSocket() {
   try {
     if (sock) {
-      logger.info('Desconectando socket...');
       await sock.end();
       sock = null;
       connectionStatus = 'disconnected';
       qrCode = null;
       emitConnectionStatus('disconnected');
-      logger.info('Socket desconectado');
     }
   } catch (error) {
     logger.error('Erro ao desconectar socket:', error);
@@ -1847,7 +1506,6 @@ export async function removeSession() {
       logger.error('Erro ao deletar do banco (continuando):', error);
     }
 
-    logger.info('Sessão removida com sucesso');
   } catch (error) {
     logger.error('Erro ao remover sessão:', error);
     throw error;
@@ -1897,11 +1555,9 @@ export async function hasSessionSaved() {
 export async function reconnectWithSavedSession(sessionIdParam = 'default', syncPeriodDaysParam = null) {
   const hasSaved = await hasSessionSaved();
   if (!hasSaved) {
-    logger.info('Nenhuma sessão salva encontrada');
     return false;
   }
 
-  logger.info('Sessão salva encontrada, tentando reconectar...');
   await createWhatsAppSocket(sessionIdParam, syncPeriodDaysParam);
   return true;
 }

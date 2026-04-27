@@ -7,7 +7,6 @@ export const authController = {
       const { email, password } = req.body;
 
       if (!email || !password) {
-        logger.warn('Tentativa de login sem email ou senha', { email }, null, 'AUTH_LOGIN_MISSING_FIELDS', req);
         return res.status(400).json({ error: 'Email e senha são obrigatórios' });
       }
 
@@ -45,7 +44,6 @@ export const authController = {
     try {
       await authService.logoutAllSessions(req.user.id, req);
 
-      logger.info('Logout de todas as sessões', { userId: req.user.id }, req.user.id, 'AUTH_LOGOUT_ALL', req);
 
       res.json({ success: true });
     } catch (error) {
