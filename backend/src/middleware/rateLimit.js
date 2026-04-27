@@ -1,5 +1,3 @@
-import { logger } from '../utils/logger.js';
-
 // Store em memória para rate limiting (em produção, usar Redis)
 const rateLimitStore = new Map();
 
@@ -50,23 +48,9 @@ export const rateLimit = (options = {}) => {
 
     // Verificar limite
     if (data.count > max) {
-        ip: key,
-        endpoint: req.path,
-        count: data.count,
-        max
-      }, null, 'RATE_LIMIT_EXCEEDED', req);
-
       return res.status(429).json({
         error: message,
         retryAfter: Math.ceil((data.resetTime - now) / 1000)
-      });
-    }
-
-    // Log de requisição (opcional, pode ser verboso)
-    if (!skipSuccessfulRequests) {
-        ip: key,
-        count: data.count,
-        remaining: max - data.count
       });
     }
 

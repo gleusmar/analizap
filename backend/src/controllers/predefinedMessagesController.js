@@ -40,11 +40,6 @@ export async function createPredefinedMessage(req, res) {
     const userId = req.user.id;
     const { shortcut, content } = req.body;
 
-      userId, 
-      shortcut: shortcut?.substring(0, 30),
-      email: req.user.email 
-    });
-
     // Verificar se o usuário existe no banco
     const { data: userExists, error: userCheckError } = await supabase
       .from('users')
