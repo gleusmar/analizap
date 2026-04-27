@@ -442,6 +442,14 @@ export async function forwardMessage(req, res) {
       targetConversationIds
     });
 
+    if (!messageIds || !Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.status(400).json({ error: 'messageIds é obrigatório e deve ser um array não vazio' });
+    }
+
+    if (!targetConversationIds || !Array.isArray(targetConversationIds) || targetConversationIds.length === 0) {
+      return res.status(400).json({ error: 'targetConversationIds é obrigatório e deve ser um array não vazio' });
+    }
+
     const sock = getSocket();
     if (!sock) {
       logger.warn('WhatsApp não está conectado ao tentar encaminhar mensagem');
@@ -456,7 +464,12 @@ export async function forwardMessage(req, res) {
           const forwarded = await forwardWhatsAppMessage(sock, conversationId, targetConvId, messageId);
           results.push({ targetConvId, messageId, success: true, forwarded });
         } catch (error) {
-          logger.error('Erro ao encaminhar mensagem:', error);
+          logger.error('Erro ao encaminhar mensagem:', {
+            error: error.message,
+            stack: error.stack,
+            targetConvId,
+            messageId
+          });
           results.push({ targetConvId, messageId, success: false, error: error.message });
         }
       }

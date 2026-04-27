@@ -1279,14 +1279,29 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions = { text: content };
     }
 
-    // Se tiver quoted message, garantir que quoted.key.remoteJid use o phone JID
+    // Se tiver quoted message, buscar o real_message_id no banco
     if (metadata.quoted) {
       const quoted = metadata.quoted;
+      let quotedMessageId = quoted.key?.id;
+
+      // Se não tiver key.id, buscar o real_message_id no banco usando o ID do banco
+      if (!quotedMessageId && quoted.id) {
+        const { data: quotedMessage } = await supabase
+          .from('messages')
+          .select('real_message_id, from_me')
+          .eq('id', quoted.id)
+          .single();
+
+        if (quotedMessage) {
+          quotedMessageId = quotedMessage.real_message_id;
+        }
+      }
+
       messageOptions.quoted = {
         key: {
           remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
-          id: quoted.key?.id,
-          fromMe: quoted.key?.fromMe,
+          id: quotedMessageId,
+          fromMe: quoted.key?.fromMe ?? quoted.from_me,
           participant: undefined // null para 1:1 chats
         },
         message: quoted.message
