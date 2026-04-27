@@ -56,8 +56,6 @@ export function getPrimaryIdentifier(lid, jid = null) {
  */
 export async function saveLidMapping(lid, jid, phone) {
   try {
-    logger.debug('Salvando mapeamento LID->JID', { lid, jid, phone });
-
     const { error } = await supabase.rpc('save_lid_mapping', {
       p_lid: lid,
       p_jid: jid,
@@ -65,11 +63,8 @@ export async function saveLidMapping(lid, jid, phone) {
     });
 
     if (error) {
-      logger.error('Erro ao salvar mapeamento LID->JID:', error);
       throw error;
     }
-
-    logger.debug('Mapeamento LID->JID salvo com sucesso', { lid, jid, phone });
   } catch (error) {
     logger.error('Erro ao salvar mapeamento LID->JID:', error);
     throw error;

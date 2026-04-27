@@ -670,8 +670,6 @@ function setupEvents(socket) {
     // Processar a mensagem (processWhatsAppMessage vai criar a conversa se necessário)
     const { processWhatsAppMessage, MESSAGE_TYPES } = await import('../services/messageService.js');
 
-    logger.debug('Chamando processWhatsAppMessage com syncPeriodDays', { syncPeriodDays });
-
     const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
     logger.info('Mensagem processada:', processedMessage ? 'Sucesso' : 'Falha', { messageId });
@@ -925,13 +923,22 @@ function setupEvents(socket) {
           await handleIncomingMessage(message, true); // true = processar
         }
       } else if (!isFromMe && type !== 'append') {
-        // Mensagem recebida com outro tipo - processar normalmente
-        logger.info('📨 Mensagem recebida (não é fromMe e não é append), processando:', {
-          messageId: message.key?.id,
-          remoteJid: message.key?.remoteJid,
-          type
-        });
-        await handleIncomingMessage(message, true); // true = processar
+        // Mensagem recebida com outro tipo - verificar duplicação antes de processar
+        const wasProcessed = await checkMessageExists(uniqueId);
+        if (wasProcessed) {
+          logger.info('⏭️ Mensagem recebida (outro tipo) já processada, ignorando:', {
+            messageId: message.key?.id,
+            uniqueId,
+            type
+          });
+        } else {
+          logger.info('📨 Mensagem recebida (outro tipo), processando:', {
+            messageId: message.key?.id,
+            remoteJid: message.key?.remoteJid,
+            type
+          });
+          await handleIncomingMessage(message, true); // true = processar
+        }
       } else {
         logger.info('⏭️ Mensagem ignorada (append será processado pelo batching):', {
           messageId: message.key?.id,
@@ -1197,11 +1204,6 @@ async function processMessageBatch() {
   const batchToProcess = [...messageBatch];
   messageBatch.length = 0; // Limpar o batch
 
-  logger.debug('processMessageBatch chamado', {
-    batchSize: batchToProcess.length,
-    syncPeriodDays
-  });
-
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -1261,11 +1263,6 @@ async function processMessageBatch() {
       // Processar mensagem (processWhatsAppMessage vai criar a conversa se necessário)
       const { processWhatsAppMessage } = await import('../services/messageService.js');
 
-      logger.debug('Chamando processWhatsAppMessage no batch', {
-        messageId,
-        syncPeriodDays
-      });
-
       const processedMessage = await processWhatsAppMessage(message, sock, syncPeriodDays);
 
       // Se a mensagem não foi processada (null), continua para a próxima
@@ -1301,8 +1298,6 @@ async function processMessageBatch() {
         await new Promise(resolve => setTimeout(resolve, MESSAGE_PROCESSING_DELAY));
       }
     }
-
-    logger.debug(`Batch processado: ${processedCount}/${batchToProcess.length} mensagens salvas`);
 
     // Delay adicional após processar batch para dar tempo ao Supabase
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1429,11 +1424,8 @@ async function handleIncomingMessage(message, shouldProcess = true) {
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
-      logger.info('🚫 Mensagem de grupo/broadcast ignorada:', remoteJid);
       return;
     }
-
-    logger.info('✅ Mensagem não é de grupo/broadcast, continuando processamento');
 
     // Verificar se a mensagem tem conteúdo válido
     if (!msg || Object.keys(msg).length === 0) {

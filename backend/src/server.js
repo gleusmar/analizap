@@ -39,25 +39,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Middleware de log para debug
-app.use((req, res, next) => {
-  const logData = {
-    method: req.method,
-    path: req.path,
-  };
-
-  if (req.method === 'POST') {
-    logData.body = req.body;
-    logData.headers = {
-      'content-type': req.headers['content-type'],
-      'authorization': req.headers['authorization'] ? '[REDACTED]' : undefined
-    };
-  }
-
-  logger.info('Requisição recebida:', logData);
-  next();
-});
-
 // Rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
