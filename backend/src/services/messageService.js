@@ -852,28 +852,6 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
 
     // Salva a mensagem
     const unique_id = `${key.remoteJid}-${fromMe ? '1' : '0'}-${key.id}`;
-
-    // Verificar se a mensagem já existe antes de salvar (evitar duplicação)
-    const { data: existingMessage } = await supabase
-      .from('messages')
-      .select('id')
-      .eq('message_id', key.id)
-      .single();
-
-    if (existingMessage) {
-      logger.info('⏭️ Mensagem já existe no banco, ignorando:', {
-        messageId: key.id,
-        unique_id
-      });
-      // Retornar a mensagem existente
-      const { data: fullMessage } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('id', existingMessage.id)
-        .single();
-      return fullMessage;
-    }
-
     const messageData = {
       conversation_id: conversation.id,
       message_id: key.id,
