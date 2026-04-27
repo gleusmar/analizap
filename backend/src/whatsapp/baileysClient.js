@@ -874,12 +874,21 @@ function setupEvents(socket) {
         }
         await handleIncomingMessage(message, true); // true = processar
       } else if (!isFromMe && type === 'append') {
-        // Mensagem recebida com append - processa agora que tem conteúdo
-        logger.info('📨 Mensagem recebida com append, processando:', {
-          messageId: message.key?.id,
-          remoteJid: message.key?.remoteJid
-        });
-        await handleIncomingMessage(message, true); // true = processar
+        // Mensagem recebida com append - verificar se já foi processada pelo notify
+        // Se foi processada pelo notify, ignorar o append para evitar duplicação
+        const wasProcessedByNotify = await checkMessageExists(uniqueId);
+        if (wasProcessedByNotify) {
+          logger.info('⏭️ Mensagem recebida com append já processada pelo notify, ignorando:', {
+            messageId: message.key?.id,
+            uniqueId
+          });
+        } else {
+          logger.info('📨 Mensagem recebida com append (não processada pelo notify), processando:', {
+            messageId: message.key?.id,
+            remoteJid: message.key?.remoteJid
+          });
+          await handleIncomingMessage(message, true); // true = processar
+        }
       } else if (!isFromMe && type !== 'append') {
         // Mensagem recebida com outro tipo - processar normalmente
         logger.info('📨 Mensagem recebida (não é fromMe e não é append), processando:', {
@@ -1324,6 +1333,32 @@ function emitConnectionStatus(status) {
  */
 function getMessageUniqueId(msg) {
   return `${msg.key?.remoteJid || ''}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
+}
+
+/**
+ * Verifica se uma mensagem já existe no banco usando o uniqueId
+ * @param {string} uniqueId - ID único da mensagem (remoteJid-fromMe-id)
+ * @returns {Promise<boolean>} - true se a mensagem existe, false caso contrário
+ */
+async function checkMessageExists(uniqueId) {
+  try {
+    // Buscar mensagem pelo unique_id (se existir no banco)
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('unique_id', uniqueId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = not found, que é esperado
+      logger.warn('Erro ao verificar existência de mensagem:', error.message);
+    }
+
+    return !!data;
+  } catch (error) {
+    logger.warn('Erro ao verificar existência de mensagem:', error.message);
+    return false;
+  }
 }
 
 /**
