@@ -1171,18 +1171,22 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
     // Se tiver quoted message, buscar no store do Baileys ou reconstruir manualmente
     if (metadata.quoted) {
       const quoted = metadata.quoted;
+
+      // Usar sempre o real_message_id se disponível (ID do WhatsApp)
       const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
-      const remoteJid = quoted.key?.remoteJid || phoneJid;
+
+      // Se for ID temporário, não tentar citar (não existe no WhatsApp)
+      if (!msgId || msgId.startsWith('temp_')) {
+        throw new Error('Não é possível citar mensagem temporária');
+      }
 
       // 1. Tentar carregar do store do Baileys
       let quotedMessage = null;
 
-      if (quoted.message_id) {
-        try {
-          quotedMessage = await sock.loadMessage(remoteJid, msgId);
-        } catch (error) {
-          // Erro ao buscar mensagem do store
-        }
+      try {
+        quotedMessage = await sock.loadMessage(phoneJid, msgId);
+      } catch (error) {
+        // Erro ao buscar mensagem do store, vamos construir manualmente
       }
 
       if (quotedMessage) {
@@ -1214,12 +1218,13 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
           }
         }
 
+        // Construir quoted message manualmente com formato correto do Baileys
         messageOptions.quoted = {
           key: {
-            remoteJid: remoteJid,
+            remoteJid: phoneJid,
             fromMe: quoted.from_me || quoted.key?.fromMe || false,
             id: msgId,
-            participant: quoted.participant || quoted.key?.participant || remoteJid // CRUCIAL: Se for DM, participant = remoteJid
+            participant: phoneJid // Para DM, participant = remoteJid
           },
           message: {
             conversation: quotedContent
