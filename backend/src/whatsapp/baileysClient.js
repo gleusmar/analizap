@@ -566,7 +566,7 @@ function setupEvents(socket) {
     const messageId = message.key.id;
     const remoteJid = message.key.remoteJid;
     const messageTimestamp = message.messageTimestamp;
-    const uniqueId = getMessageUniqueId(message);
+    const uniqueId = await getMessageUniqueId(message);
 
     logger.info('Processando mensagem enviada por nós:', { messageId, uniqueId });
 
@@ -864,7 +864,7 @@ function setupEvents(socket) {
     // Se é mensagem individual recente, processa imediatamente
     for (const message of messages) {
       const isFromMe = message.key.fromMe;
-      const uniqueId = getMessageUniqueId(message);
+      const uniqueId = await getMessageUniqueId(message);
       logger.info('🔍 Processando mensagem individual:', {
         messageId: message.key?.id,
         uniqueId,
@@ -1241,7 +1241,7 @@ async function processMessageBatch() {
       }
 
       const messageId = message.key.id;
-      const uniqueId = getMessageUniqueId(message);
+      const uniqueId = await getMessageUniqueId(message);
 
       // Para append, verificar se mensagem já existe (notify é sempre nova)
       if (type === 'append') {
@@ -1360,9 +1360,25 @@ function emitConnectionStatus(status) {
 /**
  * Gera ID único da mensagem baseado na chave do WhatsApp
  * Combina remoteJid, fromMe e id para garantir unicidade
+ * Faz mapeamento LID->JID antes de gerar o ID para evitar duplicação
  */
-function getMessageUniqueId(msg) {
-  return `${msg.key?.remoteJid || ''}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
+async function getMessageUniqueId(msg) {
+  let remoteJid = msg.key?.remoteJid || '';
+  
+  // Se o remoteJid for um LID, tentar mapear para o JID real
+  if (remoteJid.endsWith('@lid')) {
+    try {
+      const { getJidFromLid } = await import('../services/messageService.js');
+      const mappedJid = await getJidFromLid(remoteJid);
+      if (mappedJid) {
+        remoteJid = mappedJid;
+      }
+    } catch (error) {
+      // Se falhar o mapeamento, usa o LID mesmo
+    }
+  }
+  
+  return `${remoteJid}-${msg.key?.fromMe ? '1' : '0'}-${msg.key?.id || ''}`;
 }
 
 /**
