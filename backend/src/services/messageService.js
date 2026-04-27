@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger.js';
 import fs from 'fs';
 import { unlink } from 'fs/promises';
+import { getIO } from '../sockets/socket.js';
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -1279,7 +1280,7 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions = { text: content };
     }
 
-    // Se tiver quoted message, buscar o real_message_id no banco
+    // Se tiver quoted message, buscar o real_message_id no banco e reconstruir quoted.message
     if (metadata.quoted) {
       const quoted = metadata.quoted;
       let quotedMessageId = quoted.key?.id;
@@ -1288,12 +1289,17 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       if (!quotedMessageId && quoted.id) {
         const { data: quotedMessage } = await supabase
           .from('messages')
-          .select('real_message_id, from_me')
+          .select('real_message_id, from_me, message_type, content, metadata')
           .eq('id', quoted.id)
           .single();
 
         if (quotedMessage) {
           quotedMessageId = quotedMessage.real_message_id;
+          // Atualizar o objeto quoted com dados do banco
+          quoted.from_me = quotedMessage.from_me;
+          quoted.message_type = quotedMessage.message_type;
+          quoted.content = quotedMessage.content;
+          quoted.metadata = quotedMessage.metadata;
         }
       }
 
@@ -1307,8 +1313,54 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         quotedId: quoted.id,
         quotedRealMessageId: quoted.real_message_id,
         quotedKeyId: quoted.key?.id,
-        quotedFromMe: quoted.key?.fromMe ?? quoted.from_me
+        quotedFromMe: quoted.key?.fromMe ?? quoted.from_me,
+        quotedMessageType: quoted.message_type
       });
+
+      // Reconstruir quoted.message no formato do Baileys
+      let quotedMessageContent = {};
+      switch (quoted.message_type) {
+        case MESSAGE_TYPES.TEXT:
+          quotedMessageContent = { conversation: quoted.content };
+          break;
+        case MESSAGE_TYPES.IMAGE:
+          quotedMessageContent = {
+            imageMessage: {
+              url: quoted.content,
+              caption: quoted.metadata?.caption || '',
+              mimetype: quoted.metadata?.mimetype || 'image/jpeg'
+            }
+          };
+          break;
+        case MESSAGE_TYPES.AUDIO:
+          quotedMessageContent = {
+            audioMessage: {
+              url: quoted.content,
+              mimetype: quoted.metadata?.mimetype || 'audio/mpeg'
+            }
+          };
+          break;
+        case MESSAGE_TYPES.VIDEO:
+          quotedMessageContent = {
+            videoMessage: {
+              url: quoted.content,
+              caption: quoted.metadata?.caption || '',
+              mimetype: quoted.metadata?.mimetype || 'video/mp4'
+            }
+          };
+          break;
+        case MESSAGE_TYPES.DOCUMENT:
+          quotedMessageContent = {
+            documentMessage: {
+              url: quoted.content,
+              fileName: quoted.metadata?.filename || 'document',
+              mimetype: quoted.metadata?.mimetype || 'application/octet-stream'
+            }
+          };
+          break;
+        default:
+          quotedMessageContent = { conversation: quoted.content || '' };
+      }
 
       messageOptions.quoted = {
         key: {
@@ -1316,8 +1368,8 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
           id: quotedMessageId,
           fromMe: quoted.key?.fromMe ?? quoted.from_me,
           participant: undefined // null para 1:1 chats
-        }
-        // Não enviar o message - o WhatsApp busca a mensagem original automaticamente
+        },
+        message: quotedMessageContent
       };
     }
 
@@ -1452,11 +1504,23 @@ export async function forwardWhatsAppMessage(sock, fromConversationId, toConvers
     const toPhoneJid = `${toConversation.phone}@s.whatsapp.net`;
 
     // Buscar a mensagem original para obter o conteúdo
-    const { data: message, error: msgError } = await supabase
+    // Tenta buscar por message_id primeiro, se não encontrar, busca por id (do banco)
+    let { data: message, error: msgError } = await supabase
       .from('messages')
       .select('*')
       .eq('message_id', messageId)
       .single();
+
+    if (msgError || !message) {
+      // Se não encontrou por message_id, tenta por id
+      const result = await supabase
+        .from('messages')
+        .select('*')
+        .eq('id', messageId)
+        .single();
+      message = result.data;
+      msgError = result.error;
+    }
 
     if (msgError || !message) {
       throw new Error('Mensagem não encontrada');
@@ -1500,6 +1564,52 @@ export async function forwardWhatsAppMessage(sock, fromConversationId, toConvers
     const sentMessage = await sock.sendMessage(toPhoneJid, messageOptions);
 
     logger.info('Mensagem encaminhada:', { fromConversationId, toConversationId, messageId });
+
+    // Gerar temp_message_id
+    const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Salvar mensagem no banco
+    const { data: savedMessage, error: saveError } = await supabase
+      .from('messages')
+      .insert({
+        id: tempMessageId,
+        conversation_id: toConversationId,
+        message_id: tempMessageId,
+        content: message.content,
+        message_type: message.message_type,
+        from_me: true,
+        metadata: message.metadata || {},
+        is_read: false,
+        is_delivered: false
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      logger.error('Erro ao salvar mensagem encaminhada:', saveError);
+    } else {
+      // Atualizar real_message_id em background
+      const realMessageId = sentMessage.key?.id;
+      if (realMessageId) {
+        setTimeout(async () => {
+          await supabase
+            .from('messages')
+            .update({ real_message_id: realMessageId })
+            .eq('id', tempMessageId);
+          logger.info('real_message_id atualizado para mensagem encaminhada:', realMessageId);
+        }, 1000);
+      }
+
+      // Emitir evento Socket.io
+      const io = getIO();
+      if (io) {
+        io.emit('whatsapp:message', {
+          conversation_id: toConversationId,
+          message: savedMessage
+        });
+      }
+    }
+
     return sentMessage;
   } catch (error) {
     logger.error('Erro ao encaminhar mensagem:', error);
