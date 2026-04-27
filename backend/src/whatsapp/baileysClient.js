@@ -390,7 +390,7 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
 
     // Configuração do logger
     const loggerBaileys = pino({
-      level: 'warn'
+      level: 'info' // Mudar para info para ver mais detalhes
     });
 
     // Cria o socket com a versão mais recente
@@ -728,6 +728,27 @@ function setupEvents(socket) {
 
   // Evento de atualização de mensagens
   logger.info('📝 Registrando evento messages.upsert...');
+
+  // Adicionar listener para messages.update (para debug)
+  socket.ev.on('messages.update', (updates) => {
+    logger.info('📨📨 EVENTO MESSAGES.UPDATE RECEBIDO:', {
+      count: updates.length,
+      timestamp: new Date().toISOString(),
+      updates: updates.slice(0, 3).map(u => ({
+        key: u.key,
+        update: Object.keys(u.update)
+      }))
+    });
+  });
+
+  // Adicionar listener para chat.update (para debug)
+  socket.ev.on('chats.update', (updates) => {
+    logger.info('💬 EVENTO CHATS.UPDATE RECEBIDO:', {
+      count: updates.length,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
     logger.info('📨📨📨📨📨 EVENTO MESSAGES.UPSERT RECEBIDO:', {
       messageCount: messages.length,
