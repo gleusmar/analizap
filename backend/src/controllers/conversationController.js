@@ -308,12 +308,21 @@ export async function sendMessage(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
+            logger.info('📡 Emitindo whatsapp:message_updated:', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id,
+              message_id: updatedMessage?.message_id
+            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
+            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
+          } else {
+            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
@@ -651,12 +660,21 @@ export async function sendAttachment(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
+            logger.info('📡 Emitindo whatsapp:message_updated:', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id,
+              message_id: updatedMessage?.message_id
+            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
+            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
+          } else {
+            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
@@ -786,12 +804,21 @@ export async function sendLocation(req, res) {
           // Emitir evento para o frontend para atualizar mensagem temporária
           const io = getIO();
           if (io) {
+            logger.info('📡 Emitindo whatsapp:message_updated:', {
+              conversation_id: conversationId,
+              temp_message_id: tempMessageId,
+              real_message_id: sentMessage.key.id,
+              message_id: updatedMessage?.message_id
+            });
             io.emit('whatsapp:message_updated', {
               conversation_id: conversationId,
               temp_message_id: tempMessageId,
               real_message_id: sentMessage.key.id,
               message: updatedMessage
             });
+            logger.info('✅ Evento whatsapp:message_updated emitido com sucesso');
+          } else {
+            logger.warn('⚠️ Socket.io não disponível para emitir evento');
           }
         }
       })
