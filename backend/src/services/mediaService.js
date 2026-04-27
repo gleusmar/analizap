@@ -3,6 +3,7 @@ import fs from 'fs';
 import { unlink } from 'fs/promises';
 import path from 'path';
 import { uploadFileToSupabase } from './messageService.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Faz download de mídia do WhatsApp

@@ -651,7 +651,14 @@ function setupEvents(socket) {
               }
             })
             .catch(error => {
-              logger.error('Erro ao processar mídia:', error);
+              logger.error('Erro ao processar mídia:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                code: error.code,
+                messageId: processedMessage.message_id,
+                messageType: messageTypeSaved
+              });
             });
         }
       }
@@ -1301,7 +1308,14 @@ async function handleIncomingMessage(message, shouldProcess = true) {
                 }
               })
               .catch(error => {
-                logger.error('Erro ao processar mídia:', error);
+                logger.error('Erro ao processar mídia:', {
+                  message: error.message,
+                  stack: error.stack,
+                  name: error.name,
+                  code: error.code,
+                  messageId: savedMessage.message_id,
+                  messageType: messageTypeSaved
+                });
                 // Se falhar ao processar mídia, emite evento mesmo assim com a mensagem original
                 if (io) {
                   io.emit('whatsapp:message', {
