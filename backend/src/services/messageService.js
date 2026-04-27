@@ -1323,36 +1323,30 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions = { text: content };
     }
 
-    // Se tiver quoted message, buscar no store do Baileys e usar diretamente
+    // Se tiver quoted message, buscar no store do Baileys ou reconstruir manualmente
     if (metadata.quoted) {
       const quoted = metadata.quoted;
-      let quotedMessage = null;
+      const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
+      const remoteJid = quoted.key?.remoteJid || phoneJid;
 
       logger.info('📝 Processando citação:', {
         quotedId: quoted.id,
         quotedMessageId: quoted.message_id,
         quotedRealMessageId: quoted.real_message_id,
-        quotedKeyId: quoted.key?.id
+        quotedKeyId: quoted.key?.id,
+        msgId,
+        remoteJid
       });
 
-      // Tentar buscar a mensagem do store do Baileys
-      try {
-        // Para mensagens recebidas, message_id já é o ID do WhatsApp
-        // Para mensagens enviadas, real_message_id é o ID do WhatsApp
-        const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
-        const quotedRemoteJid = quoted.key?.remoteJid || `${conversation.phone}@s.whatsapp.net`;
-
-        logger.info('📦 Buscando mensagem no store do Baileys:', {
-          msgId,
-          quotedRemoteJid
-        });
-
-        if (msgId && sock.loadMessage) {
-          quotedMessage = await sock.loadMessage(quotedRemoteJid, msgId);
+      // 1. Tentar carregar do store do Baileys
+      let quotedMessage = null;
+      if (msgId && sock.loadMessage) {
+        try {
+          quotedMessage = await sock.loadMessage(remoteJid, msgId);
           logger.info('📦 Mensagem encontrada no store do Baileys:', !!quotedMessage);
+        } catch (error) {
+          logger.warn('Erro ao buscar mensagem do store do Baileys:', error.message);
         }
-      } catch (error) {
-        logger.warn('Erro ao buscar mensagem do store do Baileys:', error.message);
       }
 
       if (quotedMessage) {
@@ -1360,8 +1354,53 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions.quoted = quotedMessage;
         logger.info('✅ Citação configurada usando mensagem do store do Baileys');
       } else {
-        logger.warn('⚠️ Mensagem não encontrada no store do Baileys, citação não será exibida no celular');
-        // Não reconstruir a mensagem - se não estiver no store, a citação não funcionará corretamente
+        // 2. RECONSTRUÇÃO MANUAL (Fallback)
+        // Se não achou no store, montamos a estrutura básica que o WhatsApp exige
+        logger.info('⚠️ Mensagem não encontrada no store, usando reconstrução manual');
+
+        // Determinar o conteúdo da mensagem citada
+        let quotedContent = quoted.content || quoted.text || 'Mensagem anterior';
+
+        // Se for mídia, usar o caption ou descrição
+        if (quoted.message_type) {
+          const { MESSAGE_TYPES } = await import('./messageTypes.js');
+          switch (quoted.message_type) {
+            case MESSAGE_TYPES.IMAGE:
+              quotedContent = quoted.metadata?.caption || '📷 Imagem';
+              break;
+            case MESSAGE_TYPES.AUDIO:
+              quotedContent = '🎵 Áudio';
+              break;
+            case MESSAGE_TYPES.VIDEO:
+              quotedContent = quoted.metadata?.caption || '🎥 Vídeo';
+              break;
+            case MESSAGE_TYPES.DOCUMENT:
+              quotedContent = quoted.metadata?.filename || '📄 Documento';
+              break;
+            case MESSAGE_TYPES.LOCATION:
+              quotedContent = '📍 Localização';
+              break;
+          }
+        }
+
+        messageOptions.quoted = {
+          key: {
+            remoteJid: remoteJid,
+            fromMe: quoted.from_me || quoted.key?.fromMe || false,
+            id: msgId,
+            participant: quoted.participant || quoted.key?.participant || remoteJid // CRUCIAL: Se for DM, participant = remoteJid
+          },
+          message: {
+            conversation: quotedContent
+          }
+        };
+
+        logger.info('✅ Citação configurada usando reconstrução manual:', {
+          keyId: messageOptions.quoted.key.id,
+          keyRemoteJid: messageOptions.quoted.key.remoteJid,
+          keyParticipant: messageOptions.quoted.key.participant,
+          messageContent: messageOptions.quoted.message.conversation
+        });
       }
     }
 
