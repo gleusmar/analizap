@@ -1551,21 +1551,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
       .then(savedMessage => {
         if (!savedMessage) return;
 
-        // Emitir evento atualizado com a mensagem salva
-        if (io) {
-          logger.info('📤 Emitindo whatsapp:message (não batch):', {
-            conversation_id: savedMessage.conversation_id,
-            message_id: savedMessage.message_id
-          });
-          io.emit('whatsapp:message', {
-            conversation_id: savedMessage.conversation_id,
-            message: savedMessage,
-            is_temp: false
-          });
-          logger.info('✅ Evento whatsapp:message (não batch) emitido com sucesso');
-        }
-
-        // Se tiver mídia, processa em background
+        // Se tiver mídia, processa em background antes de emitir o evento
         if (message.message) {
           const messageTypeSaved = savedMessage.message_type;
           logger.info('🔍 Verificando se precisa processar mídia:', {
@@ -1575,7 +1561,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
           });
           if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
                MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
-            logger.info('🚀 Iniciando processamento de mídia em background:', {
+            logger.info('🚀 Iniciando processamento de mídia em background antes de emitir evento:', {
               messageId: savedMessage.message_id,
               messageType: messageTypeSaved
             });
@@ -1595,20 +1581,60 @@ async function handleIncomingMessage(message, shouldProcess = true) {
                 if (error) {
                   logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
                 } else {
-                  // Emitir evento de atualização quando a mídia for processada
-                  if (io) {
-                    io.emit('whatsapp:message_updated', {
+                  logger.info('Mídia processada, buscando mensagem atualizada para emitir evento');
+                  // Buscar mensagem atualizada com a URL da mídia
+                  const { data: updatedMessage } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('message_id', savedMessage.message_id)
+                    .single();
+
+                  // Emitir evento com a mensagem completa (incluindo URL da mídia)
+                  if (io && updatedMessage) {
+                    logger.info('📤 Emitindo whatsapp:message com mídia processada:', {
                       conversation_id: savedMessage.conversation_id,
-                      message_id: savedMessage.message_id,
-                      content: publicUrl
+                      message_id: savedMessage.message_id
                     });
+                    io.emit('whatsapp:message', {
+                      conversation_id: savedMessage.conversation_id,
+                      message: updatedMessage,
+                      is_temp: false
+                    });
+                    logger.info('✅ Evento whatsapp:message com mídia emitido com sucesso');
                   }
                 }
               })
               .catch(error => {
                 logger.error('Erro ao processar mídia:', error);
+                // Se falhar ao processar mídia, emite evento mesmo assim com a mensagem original
+                if (io) {
+                  logger.info('📤 Emitindo whatsapp:message (fallback após erro de mídia):', {
+                    conversation_id: savedMessage.conversation_id,
+                    message_id: savedMessage.message_id
+                  });
+                  io.emit('whatsapp:message', {
+                    conversation_id: savedMessage.conversation_id,
+                    message: savedMessage,
+                    is_temp: false
+                  });
+                }
               });
+            return; // Não emite o evento imediatamente para mídia
           }
+        }
+
+        // Para mensagens sem mídia (ou se não for mídia), emite o evento imediatamente
+        if (io) {
+          logger.info('📤 Emitindo whatsapp:message (não batch, sem mídia):', {
+            conversation_id: savedMessage.conversation_id,
+            message_id: savedMessage.message_id
+          });
+          io.emit('whatsapp:message', {
+            conversation_id: savedMessage.conversation_id,
+            message: savedMessage,
+            is_temp: false
+          });
+          logger.info('✅ Evento whatsapp:message (não batch) emitido com sucesso');
         }
       })
       .catch(error => {
