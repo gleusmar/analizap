@@ -326,7 +326,7 @@ export async function sendMessage(req, res) {
           }
         }
       })
-      .catch(error => {
+      .catch(async error => {
         logger.error('Erro ao enviar mensagem para WhatsApp:', error);
         // Marcar mensagem como falha
         const { error: updateError } = await supabase
