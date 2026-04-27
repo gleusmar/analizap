@@ -585,6 +585,63 @@ function setupEvents(socket) {
 
       // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
 
+      // Se tiver mídia, processa em background e atualiza depois
+      if (message.message) {
+        const { MESSAGE_TYPES } = await import('../services/messageService.js');
+        const messageType = tempMessage.message_type;
+
+        if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
+             MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageType)) {
+          // Processa mídia em background para não bloquear
+          const { processMessageMedia } = await import('../services/mediaService.js');
+          processMessageMedia(sock, message, messageType, tempMessage.message_id)
+            .then(async (publicUrl) => {
+
+              // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
+              // Verificar se o conteúdo já é uma URL (já foi processado)
+              const { data: currentMessage } = await supabase
+                .from('messages')
+                .select('content')
+                .eq('message_id', tempMessage.message_id)
+                .single();
+
+              // Só atualizar se o conteúdo atual não for uma URL (começa com http)
+              const isAlreadyUrl = currentMessage?.content?.startsWith('http');
+
+              if (isAlreadyUrl) {
+              } else {
+                const { error } = await supabase
+                  .from('messages')
+                  .update({ content: publicUrl })
+                  .eq('message_id', tempMessage.message_id);
+
+                if (error) {
+                  logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
+                } else {
+                  // Emitir evento de atualização de mensagem quando a mídia for processada
+                  if (io) {
+                    io.emit('whatsapp:message_updated', {
+                      conversation_id: tempMessage.conversation_id,
+                      message_id: tempMessage.message_id,
+                      content: publicUrl
+                    });
+                  }
+                }
+              }
+            })
+            .catch(error => {
+              logger.error('Erro ao processar mídia:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                code: error.code,
+                messageId: tempMessage.message_id,
+                messageType
+              });
+            });
+        }
+      }
+
       return; // Não processar novamente
     }
 
