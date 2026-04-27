@@ -852,6 +852,28 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
 
     // Salva a mensagem
     const unique_id = `${key.remoteJid}-${fromMe ? '1' : '0'}-${key.id}`;
+
+    // Verificar se a mensagem já existe antes de salvar (evitar duplicação)
+    const { data: existingMessage } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('message_id', key.id)
+      .single();
+
+    if (existingMessage) {
+      logger.info('⏭️ Mensagem já existe no banco, ignorando:', {
+        messageId: key.id,
+        unique_id
+      });
+      // Retornar a mensagem existente
+      const { data: fullMessage } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('id', existingMessage.id)
+        .single();
+      return fullMessage;
+    }
+
     const messageData = {
       conversation_id: conversation.id,
       message_id: key.id,
@@ -1301,59 +1323,30 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions = { text: content };
     }
 
-    // Se tiver quoted message, buscar o real_message_id no banco e reconstruir quoted.message
+    // Se tiver quoted message, buscar no store do Baileys e usar diretamente
     if (metadata.quoted) {
       const quoted = metadata.quoted;
-      let quotedMessageId = quoted.key?.id;
+      let quotedMessage = null;
 
-      // Se não tiver key.id, buscar o message_id no banco usando o ID do banco
-      // Para mensagens recebidas, message_id já é o ID do WhatsApp (key.id)
-      if (!quotedMessageId && quoted.id) {
-        const { data: quotedMessage } = await supabase
-          .from('messages')
-          .select('message_id, real_message_id, from_me, message_type, content, metadata')
-          .eq('id', quoted.id)
-          .single();
-
-        if (quotedMessage) {
-          // Usar message_id se real_message_id for null (para mensagens recebidas)
-          quotedMessageId = quotedMessage.real_message_id || quotedMessage.message_id;
-          // Atualizar o objeto quoted com dados do banco
-          quoted.from_me = quotedMessage.from_me;
-          quoted.message_type = quotedMessage.message_type;
-          quoted.content = quotedMessage.content;
-          quoted.metadata = quotedMessage.metadata;
-        }
-      }
-
-      // Se ainda não tiver, tentar usar o real_message_id ou message_id do objeto quoted
-      if (!quotedMessageId && (quoted.real_message_id || quoted.message_id)) {
-        quotedMessageId = quoted.real_message_id || quoted.message_id;
-      }
-
-      logger.info('📝 Configurando quoted message:', {
-        quotedMessageId,
+      logger.info('📝 Processando citação:', {
         quotedId: quoted.id,
+        quotedMessageId: quoted.message_id,
         quotedRealMessageId: quoted.real_message_id,
-        quotedKeyId: quoted.key?.id,
-        quotedFromMe: quoted.key?.fromMe ?? quoted.from_me,
-        quotedMessageType: quoted.message_type
+        quotedKeyId: quoted.key?.id
       });
 
       // Tentar buscar a mensagem do store do Baileys
-      // O Baileys mantém um store interno das mensagens que podem ser usadas para citação
-      let quotedMessage = null;
       try {
-        // Buscar mensagem do store usando o message ID do WhatsApp (message_id ou real_message_id)
-        // IMPORTANTE: Para mensagens recebidas, message_id já é o ID do WhatsApp
-        const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id || quotedMessageId;
-        // Usar o remoteJid original da mensagem citada se disponível, senão usar phoneJid
-        const quotedRemoteJid = quoted.key?.remoteJid || quoted.remote_jid || phoneJid;
+        // Para mensagens recebidas, message_id já é o ID do WhatsApp
+        // Para mensagens enviadas, real_message_id é o ID do WhatsApp
+        const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
+        const quotedRemoteJid = quoted.key?.remoteJid || `${conversation.phone}@s.whatsapp.net`;
+
         logger.info('📦 Buscando mensagem no store do Baileys:', {
           msgId,
-          quotedRemoteJid,
-          phoneJid
+          quotedRemoteJid
         });
+
         if (msgId && sock.loadMessage) {
           quotedMessage = await sock.loadMessage(quotedRemoteJid, msgId);
           logger.info('📦 Mensagem encontrada no store do Baileys:', !!quotedMessage);
@@ -1363,91 +1356,19 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       }
 
       if (quotedMessage) {
-        // Usar a mensagem do store do Baileys (recomendado pela documentação)
+        // Usar a mensagem do store do Baileys diretamente (conforme documentação)
         messageOptions.quoted = quotedMessage;
+        logger.info('✅ Citação configurada usando mensagem do store do Baileys');
       } else {
-        // Fallback: reconstruir o objeto de mensagem completo a partir do banco
-        logger.info('📝 Mensagem não encontrada no store, reconstruindo do banco');
-        let quotedMessageContent = {};
-
-        switch (quoted.message_type) {
-          case MESSAGE_TYPES.TEXT:
-            quotedMessageContent = { conversation: quoted.content };
-            break;
-          case MESSAGE_TYPES.IMAGE:
-            quotedMessageContent = {
-              imageMessage: {
-                url: quoted.content,
-                caption: quoted.metadata?.caption || '',
-                mimetype: quoted.metadata?.mimetype || 'image/jpeg',
-                jpegThumbnail: quoted.metadata?.thumbnail,
-                fileSha256: quoted.metadata?.fileSha256,
-                fileEncSha256: quoted.metadata?.fileEncSha256,
-                mediaKey: quoted.metadata?.mediaKey,
-                mediaKeyTimestamp: quoted.metadata?.mediaKeyTimestamp,
-                directPath: quoted.metadata?.directPath
-              }
-            };
-            break;
-          case MESSAGE_TYPES.AUDIO:
-            quotedMessageContent = {
-              audioMessage: {
-                url: quoted.content,
-                mimetype: quoted.metadata?.mimetype || 'audio/mpeg',
-                seconds: quoted.metadata?.duration
-              }
-            };
-            break;
-          case MESSAGE_TYPES.VIDEO:
-            quotedMessageContent = {
-              videoMessage: {
-                url: quoted.content,
-                caption: quoted.metadata?.caption || '',
-                mimetype: quoted.metadata?.mimetype || 'video/mp4',
-                jpegThumbnail: quoted.metadata?.thumbnail,
-                seconds: quoted.metadata?.duration
-              }
-            };
-            break;
-          case MESSAGE_TYPES.DOCUMENT:
-            quotedMessageContent = {
-              documentMessage: {
-                url: quoted.content,
-                fileName: quoted.metadata?.filename || 'document',
-                mimetype: quoted.metadata?.mimetype || 'application/octet-stream',
-                jpegThumbnail: quoted.metadata?.thumbnail
-              }
-            };
-            break;
-          default:
-            quotedMessageContent = { conversation: quoted.content || '' };
-        }
-
-        messageOptions.quoted = {
-          key: {
-            remoteJid: quoted.key?.remoteJid || quoted.remote_jid || phoneJid, // Usar remoteJid original se disponível
-            id: quoted.real_message_id || quoted.message_id || quotedMessageId, // Usar real_message_id ou message_id se disponível
-            fromMe: quoted.key?.fromMe ?? quoted.from_me,
-            participant: undefined // null para 1:1 chats
-          },
-          message: quotedMessageContent
-        };
-
-        logger.info('📝 Mensagem citada reconstruída:', {
-          key: messageOptions.quoted.key,
-          messageKeys: Object.keys(messageOptions.quoted.message),
-          hasImageMessage: !!messageOptions.quoted.message.imageMessage,
-          hasThumbnail: !!messageOptions.quoted.message.imageMessage?.jpegThumbnail,
-          hasMediaKey: !!messageOptions.quoted.message.imageMessage?.mediaKey,
-          hasFileSha256: !!messageOptions.quoted.message.imageMessage?.fileSha256
-        });
+        logger.warn('⚠️ Mensagem não encontrada no store do Baileys, citação não será exibida no celular');
+        // Não reconstruir a mensagem - se não estiver no store, a citação não funcionará corretamente
       }
     }
 
-    logger.info('📤 Enviando mensagem com citação:', {
-      hasQuoted: !!messageOptions.quoted,
-      quotedKeyId: messageOptions.quoted?.key?.id,
-      quotedMessageType: Object.keys(messageOptions.quoted?.message || {})[0]
+    logger.info('📤 Enviando mensagem:', {
+      phoneJid,
+      messageType,
+      hasQuoted: !!messageOptions.quoted
     });
 
     // Envia mensagem
