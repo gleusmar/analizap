@@ -731,7 +731,8 @@ function setupEvents(socket) {
       messageCount: messages.length,
       type,
       firstMessageId: messages[0]?.key?.id,
-      firstMessageRemoteJid: messages[0]?.key?.remoteJid
+      firstMessageRemoteJid: messages[0]?.key?.remoteJid,
+      firstMessageFromMe: messages[0]?.key?.fromMe
     });
 
     // Se é histórico (append), usa batching
