@@ -153,8 +153,8 @@ export const conversationsAPI = {
     api.post(`/conversations/${conversationId}/location`, { latitude, longitude }),
   sendReaction: (conversationId, messageId, reaction) =>
     api.post(`/conversations/${conversationId}/reaction`, { messageId, reaction }),
-  forwardMessage: (conversationId, messageId, targetConversationId) =>
-    api.post(`/conversations/${conversationId}/forward`, { messageId, targetConversationId }),
+  forwardMessage: (conversationId, messageIds, targetConversationIds) =>
+    api.post(`/conversations/${conversationId}/forward`, { messageIds, targetConversationIds }),
   delete: (conversationId) => api.delete(`/conversations/${conversationId}`),
 };
 

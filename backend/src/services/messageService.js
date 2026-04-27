@@ -1316,8 +1316,8 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
           id: quotedMessageId,
           fromMe: quoted.key?.fromMe ?? quoted.from_me,
           participant: undefined // null para 1:1 chats
-        },
-        message: quoted.message
+        }
+        // Não enviar o message - o WhatsApp busca a mensagem original automaticamente
       };
     }
 
