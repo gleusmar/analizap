@@ -1318,50 +1318,15 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         quotedMessageType: quoted.message_type
       });
 
-      // Reconstruir quoted.message no formato do Baileys
-      // Para imagens, usar texto simples no preview para garantir que funcione
-      let quotedMessageContent = {};
-      switch (quoted.message_type) {
-        case MESSAGE_TYPES.TEXT:
-          quotedMessageContent = { conversation: quoted.content };
-          break;
-        case MESSAGE_TYPES.IMAGE:
-          quotedMessageContent = {
-            conversation: quoted.metadata?.caption || '📷 Imagem'
-          };
-          break;
-        case MESSAGE_TYPES.AUDIO:
-          quotedMessageContent = {
-            conversation: '🎵 Áudio'
-          };
-          break;
-        case MESSAGE_TYPES.VIDEO:
-          quotedMessageContent = {
-            conversation: quoted.metadata?.caption || '🎥 Vídeo'
-          };
-          break;
-        case MESSAGE_TYPES.DOCUMENT:
-          quotedMessageContent = {
-            conversation: `📄 ${quoted.metadata?.filename || 'Documento'}`
-          };
-          break;
-        case MESSAGE_TYPES.LOCATION:
-          quotedMessageContent = {
-            conversation: '📍 Localização'
-          };
-          break;
-        default:
-          quotedMessageContent = { conversation: quoted.content || '' };
-      }
-
+      // Configurar quoted message - usar apenas a key sem o message
+      // O WhatsApp buscará automaticamente a mensagem original dos servidores
       messageOptions.quoted = {
         key: {
           remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
           id: quotedMessageId,
           fromMe: quoted.key?.fromMe ?? quoted.from_me,
           participant: undefined // null para 1:1 chats
-        },
-        message: quotedMessageContent
+        }
       };
     }
 
