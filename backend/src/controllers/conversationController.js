@@ -14,7 +14,6 @@ import {
   sendWhatsAppAttachment,
   sendWhatsAppLocation,
   sendWhatsAppReaction,
-  forwardWhatsAppMessage,
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { getSocket, getIO } from '../whatsapp/baileysClient.js';
@@ -402,8 +401,8 @@ export async function forwardMessage(req, res) {
     for (const targetConvId of targetConversationIds) {
       for (const messageId of messageIds) {
         try {
-          const forwarded = await forwardWhatsAppMessage(sock, conversationId, targetConvId, messageId);
-          results.push({ targetConvId, messageId, success: true, forwarded });
+          // TODO: Implementar forwardWhatsAppMessage
+          results.push({ targetConvId, messageId, success: false, error: 'Funcionalidade não implementada' });
         } catch (error) {
           results.push({ targetConvId, messageId, success: false, error: error.message });
         }
