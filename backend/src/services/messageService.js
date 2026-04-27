@@ -1306,16 +1306,18 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       const quoted = metadata.quoted;
       let quotedMessageId = quoted.key?.id;
 
-      // Se não tiver key.id, buscar o real_message_id no banco usando o ID do banco
+      // Se não tiver key.id, buscar o message_id no banco usando o ID do banco
+      // Para mensagens recebidas, message_id já é o ID do WhatsApp (key.id)
       if (!quotedMessageId && quoted.id) {
         const { data: quotedMessage } = await supabase
           .from('messages')
-          .select('real_message_id, from_me, message_type, content, metadata')
+          .select('message_id, real_message_id, from_me, message_type, content, metadata')
           .eq('id', quoted.id)
           .single();
 
         if (quotedMessage) {
-          quotedMessageId = quotedMessage.real_message_id;
+          // Usar message_id se real_message_id for null (para mensagens recebidas)
+          quotedMessageId = quotedMessage.real_message_id || quotedMessage.message_id;
           // Atualizar o objeto quoted com dados do banco
           quoted.from_me = quotedMessage.from_me;
           quoted.message_type = quotedMessage.message_type;
@@ -1324,9 +1326,9 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         }
       }
 
-      // Se ainda não tiver, tentar usar o real_message_id do objeto quoted
-      if (!quotedMessageId && quoted.real_message_id) {
-        quotedMessageId = quoted.real_message_id;
+      // Se ainda não tiver, tentar usar o real_message_id ou message_id do objeto quoted
+      if (!quotedMessageId && (quoted.real_message_id || quoted.message_id)) {
+        quotedMessageId = quoted.real_message_id || quoted.message_id;
       }
 
       logger.info('📝 Configurando quoted message:', {
@@ -1342,9 +1344,9 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
       // O Baileys mantém um store interno das mensagens que podem ser usadas para citação
       let quotedMessage = null;
       try {
-        // Buscar mensagem do store usando o message ID do WhatsApp (real_message_id)
-        // IMPORTANTE: Sempre usar real_message_id para buscar no store do Baileys
-        const msgId = quoted.real_message_id || quoted.key?.id || quotedMessageId;
+        // Buscar mensagem do store usando o message ID do WhatsApp (message_id ou real_message_id)
+        // IMPORTANTE: Para mensagens recebidas, message_id já é o ID do WhatsApp
+        const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id || quotedMessageId;
         // Usar o remoteJid original da mensagem citada se disponível, senão usar phoneJid
         const quotedRemoteJid = quoted.key?.remoteJid || quoted.remote_jid || phoneJid;
         logger.info('📦 Buscando mensagem no store do Baileys:', {
@@ -1424,7 +1426,7 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions.quoted = {
           key: {
             remoteJid: quoted.key?.remoteJid || quoted.remote_jid || phoneJid, // Usar remoteJid original se disponível
-            id: quoted.real_message_id || quotedMessageId, // Usar real_message_id se disponível
+            id: quoted.real_message_id || quoted.message_id || quotedMessageId, // Usar real_message_id ou message_id se disponível
             fromMe: quoted.key?.fromMe ?? quoted.from_me,
             participant: undefined // null para 1:1 chats
           },
