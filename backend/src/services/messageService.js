@@ -1421,8 +1421,23 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
           },
           message: quotedMessageContent
         };
+
+        logger.info('📝 Mensagem citada reconstruída:', {
+          key: messageOptions.quoted.key,
+          messageKeys: Object.keys(messageOptions.quoted.message),
+          hasImageMessage: !!messageOptions.quoted.message.imageMessage,
+          hasThumbnail: !!messageOptions.quoted.message.imageMessage?.jpegThumbnail,
+          hasMediaKey: !!messageOptions.quoted.message.imageMessage?.mediaKey,
+          hasFileSha256: !!messageOptions.quoted.message.imageMessage?.fileSha256
+        });
       }
     }
+
+    logger.info('📤 Enviando mensagem com citação:', {
+      hasQuoted: !!messageOptions.quoted,
+      quotedKeyId: messageOptions.quoted?.key?.id,
+      quotedMessageType: Object.keys(messageOptions.quoted?.message || {})[0]
+    });
 
     // Envia mensagem
     const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
