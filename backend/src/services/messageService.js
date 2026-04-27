@@ -1335,72 +1335,91 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         quotedMessageType: quoted.message_type
       });
 
-      // Configurar quoted message - reconstruir o objeto de mensagem completo
-      // Segundo a documentação do Baileys, é necessário passar o objeto WAMessage original
-      let quotedMessageContent = {};
-
-      switch (quoted.message_type) {
-        case MESSAGE_TYPES.TEXT:
-          quotedMessageContent = { conversation: quoted.content };
-          break;
-        case MESSAGE_TYPES.IMAGE:
-          quotedMessageContent = {
-            imageMessage: {
-              url: quoted.content,
-              caption: quoted.metadata?.caption || '',
-              mimetype: quoted.metadata?.mimetype || 'image/jpeg',
-              jpegThumbnail: quoted.metadata?.thumbnail,
-              fileSha256: quoted.metadata?.fileSha256,
-              fileEncSha256: quoted.metadata?.fileEncSha256,
-              mediaKey: quoted.metadata?.mediaKey,
-              mediaKeyTimestamp: quoted.metadata?.mediaKeyTimestamp,
-              directPath: quoted.metadata?.directPath
-            }
-          };
-          break;
-        case MESSAGE_TYPES.AUDIO:
-          quotedMessageContent = {
-            audioMessage: {
-              url: quoted.content,
-              mimetype: quoted.metadata?.mimetype || 'audio/mpeg',
-              seconds: quoted.metadata?.duration
-            }
-          };
-          break;
-        case MESSAGE_TYPES.VIDEO:
-          quotedMessageContent = {
-            videoMessage: {
-              url: quoted.content,
-              caption: quoted.metadata?.caption || '',
-              mimetype: quoted.metadata?.mimetype || 'video/mp4',
-              jpegThumbnail: quoted.metadata?.thumbnail,
-              seconds: quoted.metadata?.duration
-            }
-          };
-          break;
-        case MESSAGE_TYPES.DOCUMENT:
-          quotedMessageContent = {
-            documentMessage: {
-              url: quoted.content,
-              fileName: quoted.metadata?.filename || 'document',
-              mimetype: quoted.metadata?.mimetype || 'application/octet-stream',
-              jpegThumbnail: quoted.metadata?.thumbnail
-            }
-          };
-          break;
-        default:
-          quotedMessageContent = { conversation: quoted.content || '' };
+      // Tentar buscar a mensagem do store do Baileys
+      // O Baileys mantém um store interno das mensagens que podem ser usadas para citação
+      let quotedMessage = null;
+      try {
+        // Buscar mensagem do store usando o message ID
+        const msgId = quotedMessageId || quoted.real_message_id || quoted.key?.id;
+        if (msgId && sock.loadMessage) {
+          quotedMessage = await sock.loadMessage(phoneJid, msgId);
+          logger.info('📦 Mensagem encontrada no store do Baileys:', !!quotedMessage);
+        }
+      } catch (error) {
+        logger.warn('Erro ao buscar mensagem do store do Baileys:', error.message);
       }
 
-      messageOptions.quoted = {
-        key: {
-          remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
-          id: quotedMessageId,
-          fromMe: quoted.key?.fromMe ?? quoted.from_me,
-          participant: undefined // null para 1:1 chats
-        },
-        message: quotedMessageContent
-      };
+      if (quotedMessage) {
+        // Usar a mensagem do store do Baileys (recomendado pela documentação)
+        messageOptions.quoted = quotedMessage;
+      } else {
+        // Fallback: reconstruir o objeto de mensagem completo a partir do banco
+        logger.info('📝 Mensagem não encontrada no store, reconstruindo do banco');
+        let quotedMessageContent = {};
+
+        switch (quoted.message_type) {
+          case MESSAGE_TYPES.TEXT:
+            quotedMessageContent = { conversation: quoted.content };
+            break;
+          case MESSAGE_TYPES.IMAGE:
+            quotedMessageContent = {
+              imageMessage: {
+                url: quoted.content,
+                caption: quoted.metadata?.caption || '',
+                mimetype: quoted.metadata?.mimetype || 'image/jpeg',
+                jpegThumbnail: quoted.metadata?.thumbnail,
+                fileSha256: quoted.metadata?.fileSha256,
+                fileEncSha256: quoted.metadata?.fileEncSha256,
+                mediaKey: quoted.metadata?.mediaKey,
+                mediaKeyTimestamp: quoted.metadata?.mediaKeyTimestamp,
+                directPath: quoted.metadata?.directPath
+              }
+            };
+            break;
+          case MESSAGE_TYPES.AUDIO:
+            quotedMessageContent = {
+              audioMessage: {
+                url: quoted.content,
+                mimetype: quoted.metadata?.mimetype || 'audio/mpeg',
+                seconds: quoted.metadata?.duration
+              }
+            };
+            break;
+          case MESSAGE_TYPES.VIDEO:
+            quotedMessageContent = {
+              videoMessage: {
+                url: quoted.content,
+                caption: quoted.metadata?.caption || '',
+                mimetype: quoted.metadata?.mimetype || 'video/mp4',
+                jpegThumbnail: quoted.metadata?.thumbnail,
+                seconds: quoted.metadata?.duration
+              }
+            };
+            break;
+          case MESSAGE_TYPES.DOCUMENT:
+            quotedMessageContent = {
+              documentMessage: {
+                url: quoted.content,
+                fileName: quoted.metadata?.filename || 'document',
+                mimetype: quoted.metadata?.mimetype || 'application/octet-stream',
+                jpegThumbnail: quoted.metadata?.thumbnail
+              }
+            };
+            break;
+          default:
+            quotedMessageContent = { conversation: quoted.content || '' };
+        }
+
+        messageOptions.quoted = {
+          key: {
+            remoteJid: phoneJid, // Sempre usar phone JID para quoted messages
+            id: quotedMessageId,
+            fromMe: quoted.key?.fromMe ?? quoted.from_me,
+            participant: undefined // null para 1:1 chats
+          },
+          message: quotedMessageContent
+        };
+      }
     }
 
     // Envia mensagem
