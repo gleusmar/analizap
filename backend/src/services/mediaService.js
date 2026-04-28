@@ -8,15 +8,12 @@ import { logger } from '../utils/logger.js';
 /**
  * Faz download de mídia do WhatsApp
  */
-export async function downloadMediaFromWhatsApp(sock, message) {
+export async function downloadMediaFromWhatsApp(message) {
   try {
-    const buffer = await downloadMediaMessage(message, 'buffer', {
-      logger: logger
-    });
-
+    const buffer = await downloadMediaMessage(message, 'buffer', {});
     return buffer;
   } catch (error) {
-    // Se for erro 403, a URL expirou - é normal para mensagens antigas
+    // 403 = URL expirada (normal para mensagens antigas)
     if (error.response?.status === 403 || error.code === 'ERR_BAD_REQUEST') {
       return null;
     }
@@ -44,11 +41,9 @@ export async function saveTempFile(buffer, fileName) {
 /**
  * Processa mídia de uma mensagem: download, upload para Supabase e atualização do banco
  */
-export async function processMessageMedia(sock, message, messageType, messageId) {
+export async function processMessageMedia(message, messageType, messageId) {
   try {
-
-    // Faz download da mídia
-    const buffer = await downloadMediaFromWhatsApp(sock, message);
+    const buffer = await downloadMediaFromWhatsApp(message);
 
     // Se buffer for null (URL expirada), retorna null sem erro
     if (!buffer) {
@@ -65,8 +60,10 @@ export async function processMessageMedia(sock, message, messageType, messageId)
         extension = msg.imageMessage.mimetype?.split('/')[1] || 'jpg';
         mimeType = msg.imageMessage.mimetype || 'image/jpeg';
       } else if (msg.audioMessage) {
-        extension = msg.audioMessage.mimetype?.split('/')[1] || 'mp3';
-        mimeType = msg.audioMessage.mimetype || 'audio/mpeg';
+        // PTT chega como 'audio/ogg; codecs=opus' — remover parâmetro para extensão limpa
+        const baseMime = (msg.audioMessage.mimetype || 'audio/ogg').split(';')[0].trim();
+        extension = baseMime.split('/')[1] || 'ogg';
+        mimeType = baseMime;
       } else if (msg.videoMessage) {
         extension = msg.videoMessage.mimetype?.split('/')[1] || 'mp4';
         mimeType = msg.videoMessage.mimetype || 'video/mp4';

@@ -617,7 +617,7 @@ function setupEvents(socket) {
           // Processa mídia em background para não bloquear
           const { processMessageMedia } = await import('../services/mediaService.js');
           // Usa messageId (ID real do WhatsApp) pois tempMessage.message_id já foi sobrescrito
-          processMessageMedia(sock, message, messageType, messageId)
+          processMessageMedia(message, messageType, messageId)
             .then(async (publicUrl) => {
               if (!publicUrl) return;
 
@@ -684,7 +684,7 @@ function setupEvents(socket) {
              MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
           // Processa mídia em background para não bloquear
           const { processMessageMedia } = await import('../services/mediaService.js');
-          processMessageMedia(sock, message, messageTypeSaved, processedMessage.message_id)
+          processMessageMedia(message, messageTypeSaved, processedMessage.message_id)
             .then(async (publicUrl) => {
 
               // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
@@ -1320,7 +1320,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
           const messageTypeSaved = savedMessage.message_type;
           if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.AUDIO, MESSAGE_TYPES.VIDEO,
                MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageTypeSaved)) {
-            processMessageMedia(sock, message, messageTypeSaved, savedMessage.message_id)
+            processMessageMedia(message, messageTypeSaved, savedMessage.message_id)
               .then(async (publicUrl) => {
                 const { createClient } = await import('@supabase/supabase-js');
                 const supabase = createClient(

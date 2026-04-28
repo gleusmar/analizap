@@ -1,6 +1,6 @@
 import { Server } from 'socket.io';
 import { logger } from '../utils/logger.js';
-import { setSocketIO } from '../whatsapp/baileysClient.js';
+import { setSocketIO, getSocket } from '../whatsapp/baileysClient.js';
 
 let io = null;
 
@@ -22,6 +22,42 @@ export function initializeSocket(server) {
   setSocketIO(io);
 
   io.on('connection', (socket) => {
+    /**
+     * Frontend abre uma conversa: envia confirmação de leitura ao WhatsApp.
+     * Payload: { phone: string, last_message_id: string }
+     */
+    socket.on('read_conversation', async ({ phone, last_message_id }) => {
+      try {
+        const sock = getSocket();
+        if (!sock || !phone || !last_message_id) return;
+
+        const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+
+        await sock.readMessages([{
+          remoteJid: jid,
+          id: last_message_id,
+          fromMe: false
+        }]);
+      } catch (error) {
+        logger.error('Erro ao marcar conversa como lida no WhatsApp:', error.message);
+      }
+    });
+
+    /**
+     * Frontend envia atualização de presença (digitando, gravando, pausado).
+     * Payload: { phone: string, presence: 'composing' | 'recording' | 'paused' | 'available' }
+     */
+    socket.on('send_presence', async ({ phone, presence }) => {
+      try {
+        const sock = getSocket();
+        if (!sock || !phone || !presence) return;
+
+        const jid = phone.includes('@') ? phone : `${phone}@s.whatsapp.net`;
+        await sock.sendPresenceUpdate(presence, jid);
+      } catch (error) {
+        logger.error('Erro ao enviar presença:', error.message);
+      }
+    });
   });
 
   logger.info('✅ Socket.io inicializado com sucesso');
