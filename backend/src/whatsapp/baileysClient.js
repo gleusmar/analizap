@@ -353,11 +353,11 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     authState = state; // Armazena o state globalmente
 
     // Wrapper para saveCreds que também salva no banco de dados
-    saveCredsFunction = async (creds) => {
-      await saveCreds(creds);
-      // Salvar também no banco de dados como backup
+    // saveCreds do Baileys não recebe argumentos - salva state.creds por referência
+    saveCredsFunction = async () => {
+      await saveCreds();
       try {
-        await saveAuthToDB(creds);
+        await saveAuthToDB(state.creds);
       } catch (error) {
         logger.error('Erro ao salvar creds no banco (continuando com arquivo):', error);
       }
@@ -366,10 +366,8 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
     // Fetch the latest version of WA Web and Baileys
     const { version, isLatest } = await fetchLatestBaileysVersion();
 
-    // Configuração do logger
-    const loggerBaileys = pino({
-      level: 'debug' // Mudar para debug para ver todos os eventos do Baileys
-    });
+    // Configuração do logger - silencioso em produção para evitar lentidão
+    const loggerBaileys = pino({ level: 'silent' });
 
     // Cria o socket com a versão mais recente
     sock = makeWASocket({
@@ -419,7 +417,9 @@ function setupEvents(socket) {
     }
 
     if (connection === 'close') {
-      const statusCode = (lastDisconnect?.error instanceof Boom)?.output?.statusCode;
+      const statusCode = (lastDisconnect?.error instanceof Boom)
+        ? lastDisconnect.error.output?.statusCode
+        : undefined;
 
       // Determinar se deve reconectar baseado no DisconnectReason
       let shouldReconnect = true;
@@ -501,7 +501,7 @@ function setupEvents(socket) {
 
   // Evento de credenciais atualizadas
   socket.ev.on('creds.update', async () => {
-    await saveAuthState(authState);
+    await saveCredsFunction();
   });
 
   // Função para processar mensagens enviadas por nós
@@ -594,48 +594,38 @@ function setupEvents(socket) {
              MESSAGE_TYPES.DOCUMENT, MESSAGE_TYPES.STICKER].includes(messageType)) {
           // Processa mídia em background para não bloquear
           const { processMessageMedia } = await import('../services/mediaService.js');
-          processMessageMedia(sock, message, messageType, tempMessage.message_id)
+          // Usa messageId (ID real do WhatsApp) pois tempMessage.message_id já foi sobrescrito
+          processMessageMedia(sock, message, messageType, messageId)
             .then(async (publicUrl) => {
+              if (!publicUrl) return;
 
-              // Atualiza a mensagem com a URL do Supabase (preserva metadados existentes)
-              // Verificar se o conteúdo já é uma URL (já foi processado)
               const { data: currentMessage } = await supabase
                 .from('messages')
                 .select('content')
-                .eq('message_id', tempMessage.message_id)
+                .eq('message_id', messageId)
                 .single();
 
-              // Só atualizar se o conteúdo atual não for uma URL (começa com http)
-              const isAlreadyUrl = currentMessage?.content?.startsWith('http');
+              if (currentMessage?.content?.startsWith('http')) return;
 
-              if (isAlreadyUrl) {
-              } else {
-                const { error } = await supabase
-                  .from('messages')
-                  .update({ content: publicUrl })
-                  .eq('message_id', tempMessage.message_id);
+              const { error } = await supabase
+                .from('messages')
+                .update({ content: publicUrl })
+                .eq('message_id', messageId);
 
-                if (error) {
-                  logger.error('Erro ao atualizar mensagem com URL da mídia:', error);
-                } else {
-                  // Emitir evento de atualização de mensagem quando a mídia for processada
-                  if (io) {
-                    io.emit('whatsapp:message_updated', {
-                      conversation_id: tempMessage.conversation_id,
-                      message_id: tempMessage.message_id,
-                      content: publicUrl
-                    });
-                  }
-                }
+              if (!error && io) {
+                io.emit('whatsapp:message_updated', {
+                  conversation_id: tempMessage.conversation_id,
+                  message_id: messageId,
+                  content: publicUrl
+                });
               }
             })
             .catch(error => {
-              logger.error('Erro ao processar mídia:', {
+              logger.error('Erro ao processar mídia de mensagem enviada:', {
                 message: error.message,
                 stack: error.stack,
-                name: error.name,
                 code: error.code,
-                messageId: tempMessage.message_id,
+                messageId,
                 messageType
               });
             });
