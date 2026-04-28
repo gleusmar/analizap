@@ -494,11 +494,11 @@ export async function sendAttachment(req, res) {
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
     }
 
-    // Enviar anexo para o WhatsApp
+    // Enviar anexo para o WhatsApp (usa buffer em memória)
     const sentMessage = await sendWhatsAppAttachment(sock, conversationId, file, caption);
 
-    // Fazer upload do arquivo para o Supabase Storage
-    const publicUrl = await uploadFileToSupabase(filePath, fileName, file.mimetype);
+    // Fazer upload do buffer para o Supabase Storage
+    const publicUrl = await uploadFileToSupabase(file.buffer, file.originalname, file.mimetype);
 
     // Gerar ID temporário para a mensagem
     const tempMessageId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

@@ -482,6 +482,9 @@ function Chat() {
   };
 
   const handleSelectConversation = async (conversation) => {
+    // Já está selecionada: não faz nada (evita loading infinito)
+    if (selectedConversation?.id === conversation.id) return;
+
     setLoadingConversation(true);
 
     // Limpar mensagens otimistas da conversa anterior

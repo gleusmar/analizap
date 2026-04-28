@@ -348,9 +348,11 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
 /**
  * Faz upload de arquivo para o Supabase Storage
  */
-export async function uploadFileToSupabase(filePath, fileName, mimeType) {
+export async function uploadFileToSupabase(filePathOrBuffer, fileName, mimeType) {
   try {
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = Buffer.isBuffer(filePathOrBuffer)
+      ? filePathOrBuffer
+      : fs.readFileSync(filePathOrBuffer);
     const filePathStorage = `whatsapp/${Date.now()}-${fileName}`;
 
     const { data, error } = await supabase.storage
@@ -1181,74 +1183,52 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         messageOptions = { text: content };
     }
 
-    // Se tiver quoted message, buscar no store do Baileys ou reconstruir manualmente
+    // Se tiver quoted message, construir objeto para o 3º parâmetro de sendMessage
+    // Em Baileys, quoted DEVE ir nas options (3º arg), NÃO dentro do content
+    let sendOptions = {};
+
     if (metadata.quoted) {
       const quoted = metadata.quoted;
 
-      // Usar sempre o real_message_id se disponível (ID do WhatsApp)
+      // Preferir real_message_id (ID real do WhatsApp) ao temp ID
       const msgId = quoted.real_message_id || quoted.message_id || quoted.key?.id;
 
-      // Se for ID temporário, não tentar citar (não existe no WhatsApp)
-      if (!msgId || msgId.startsWith('temp_')) {
-        throw new Error('Não é possível citar mensagem temporária');
-      }
+      // Se ainda for temporário, ignorar o quote (não existe no WhatsApp)
+      if (msgId && !msgId.startsWith('temp_')) {
+        // 1. Tentar carregar do store do Baileys
+        let quotedWAMessage = null;
+        try {
+          quotedWAMessage = await sock.loadMessage(phoneJid, msgId);
+        } catch (_) { /* store não disponível */ }
 
-      // 1. Tentar carregar do store do Baileys
-      let quotedMessage = null;
-
-      try {
-        quotedMessage = await sock.loadMessage(phoneJid, msgId);
-      } catch (error) {
-        // Erro ao buscar mensagem do store, vamos construir manualmente
-      }
-
-      if (quotedMessage) {
-        // Usar a mensagem do store do Baileys diretamente (conforme documentação)
-        messageOptions.quoted = quotedMessage;
-      } else {
-
-        // Determinar o conteúdo da mensagem citada
-        let quotedContent = quoted.content || quoted.text || 'Mensagem anterior';
-
-        // Se for mídia, usar o caption ou descrição
-        if (quoted.message_type) {
-          switch (quoted.message_type) {
-            case MESSAGE_TYPES.IMAGE:
-              quotedContent = quoted.metadata?.caption || '📷 Imagem';
-              break;
-            case MESSAGE_TYPES.AUDIO:
-              quotedContent = '🎵 Áudio';
-              break;
-            case MESSAGE_TYPES.VIDEO:
-              quotedContent = quoted.metadata?.caption || '🎥 Vídeo';
-              break;
-            case MESSAGE_TYPES.DOCUMENT:
-              quotedContent = quoted.metadata?.filename || '📄 Documento';
-              break;
-            case MESSAGE_TYPES.LOCATION:
-              quotedContent = '📍 Localização';
-              break;
+        if (!quotedWAMessage) {
+          // Construir manualmente — Baileys só precisa de key + message para DMs
+          let quotedContent = quoted.content || quoted.text || '';
+          if (quoted.message_type) {
+            switch (quoted.message_type) {
+              case MESSAGE_TYPES.IMAGE:    quotedContent = quoted.metadata?.caption || '📷 Imagem'; break;
+              case MESSAGE_TYPES.AUDIO:   quotedContent = '🎵 Áudio'; break;
+              case MESSAGE_TYPES.VIDEO:   quotedContent = quoted.metadata?.caption || '🎥 Vídeo'; break;
+              case MESSAGE_TYPES.DOCUMENT: quotedContent = quoted.metadata?.filename || '📄 Documento'; break;
+              case MESSAGE_TYPES.LOCATION: quotedContent = '📍 Localização'; break;
+            }
           }
+          quotedWAMessage = {
+            key: {
+              remoteJid: phoneJid,
+              fromMe: quoted.from_me ?? false,
+              id: msgId
+            },
+            message: { conversation: quotedContent }
+          };
         }
 
-        // Construir quoted message manualmente com formato correto do Baileys
-        // IMPORTANTE: participant NÃO deve ser definido para mensagens diretas (DM)
-        // Só é necessário em grupos para identificar quem enviou
-        messageOptions.quoted = {
-          key: {
-            remoteJid: phoneJid,
-            fromMe: quoted.from_me !== undefined ? quoted.from_me : (quoted.key?.fromMe ?? false),
-            id: msgId
-          },
-          message: {
-            conversation: quotedContent
-          }
-        };
+        sendOptions.quoted = quotedWAMessage;
       }
     }
 
-    // Envia mensagem
-    const sentMessage = await sock.sendMessage(phoneJid, messageOptions);
+    // Envia mensagem — quoted passa no 3º parâmetro (options)
+    const sentMessage = await sock.sendMessage(phoneJid, messageOptions, sendOptions);
 
     return sentMessage;
   } catch (error) {
