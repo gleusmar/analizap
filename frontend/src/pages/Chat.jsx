@@ -44,6 +44,7 @@ function Chat() {
   const [predefinedMessages, setPredefinedMessages] = useState([]);
   const [showContactPanel, setShowContactPanel] = useState(false);
   const messagesContainerRef = useRef(null);
+  const prevScrollHeightRef = useRef(0);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [socketMessages, setSocketMessages] = useState({}); // Mensagens recebidas via Socket.io
   const [showForwardModal, setShowForwardModal] = useState(false);
@@ -63,87 +64,116 @@ function Chat() {
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
   const { messages, loading: loadingMessages, refresh: refreshMessages, hasMore, loadMore } = useConversationMessages(selectedConversation?.id);
 
+  // --- Refs estáveis para evitar closures stale ---
+  const selectedConversationRef = useRef(selectedConversation);
+  useEffect(() => { selectedConversationRef.current = selectedConversation; }, [selectedConversation]);
+  const conversationsWithTagsRef = useRef(conversationsWithTags);
+  useEffect(() => { conversationsWithTagsRef.current = conversationsWithTags; }, [conversationsWithTags]);
+  const refreshConversationsTimerRef = useRef(null);
+  const presenceTimerRef = useRef(null);
+
+  // Beep de notificação via Web Audio API (sem arquivo externo)
+  const playNotificationSound = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    } catch { /* sem AudioContext */ }
+  }, []);
+
+  // Notificação nativa do browser
+  const showBrowserNotification = useCallback((title, body) => {
+    if (!('Notification' in window)) return;
+    const show = () => new Notification(title, { body, icon: '/ico.png', tag: 'wa-msg' });
+    if (Notification.permission === 'granted') show();
+    else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') show(); });
+  }, []);
+
+  // Pede permissão ao montar
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  }, []);
+
   // Integrar com Socket.io para receber mensagens em tempo real
   const handleMessageReceived = useCallback((conversationId, message, isTemp = false) => {
-    // Com a nova abordagem, não precisamos mais de mensagens temporárias
-    // As mensagens são salvas imediatamente com ID temporário e o real_message_id é atualizado em background
-    // Basta adicionar a mensagem ao socketMessages
+    if (!message) return; // null = falha de entrega
+
+    // Adiciona/atualiza nos socketMessages
     setSocketMessages(prev => {
       const convMessages = prev[conversationId] || [];
-      // Verifica se já existe uma mensagem com o mesmo message_id
       const existingIndex = convMessages.findIndex(m => m.message_id === message.message_id);
-
       if (existingIndex >= 0) {
-        // Substitui a mensagem existente (caso o real_message_id tenha sido atualizado)
         const updated = [...convMessages];
         updated[existingIndex] = message;
-        return {
-          ...prev,
-          [conversationId]: updated
-        };
-      } else {
-        // Adiciona nova mensagem
-        return {
-          ...prev,
-          [conversationId]: [...convMessages, message]
-        };
+        return { ...prev, [conversationId]: updated };
       }
+      return { ...prev, [conversationId]: [...convMessages, message] };
     });
 
-    // Invalida cache para a próxima atualização
-    const cacheKey = `messages_${conversationId}`;
-    localStorage.removeItem(cacheKey);
-    localStorage.removeItem(`${cacheKey}_time`);
+    // Atualiza sidebar in-place sem refresh de rede
+    setConversationsWithTags(prev => {
+      const idx = prev.findIndex(c => c.id === conversationId);
+      if (idx === -1) {
+        clearTimeout(refreshConversationsTimerRef.current);
+        refreshConversationsTimerRef.current = setTimeout(() => refreshConversations(), 1500);
+        return prev;
+      }
+      const isActive = selectedConversationRef.current?.id === conversationId;
+      const updated = [...prev];
+      const conv = { ...updated[idx], last_message: message, last_message_at: message.timestamp, unread_count: isActive ? 0 : (updated[idx].unread_count || 0) + 1 };
+      updated.splice(idx, 1);
+      const firstNonPinned = updated.findIndex(c => !c.is_pinned);
+      updated.splice(firstNonPinned === -1 ? 0 : firstNonPinned, 0, conv);
+      return updated;
+    });
 
-    // Invalidar cache da lista de conversas
-    localStorage.removeItem('conversations_list');
-    localStorage.removeItem('conversations_list_time');
+    // Notificação + som apenas para mensagens externas em outras conversas
+    if (!message.from_me && selectedConversationRef.current?.id !== conversationId) {
+      playNotificationSound();
+      const conv = conversationsWithTagsRef.current.find(c => c.id === conversationId) || {};
+      const sender = conv.contact_name || conv.phone || 'Nova mensagem';
+      const body = message.message_type === 'text' ? (message.content || '') : `[${message.message_type}]`;
+      showBrowserNotification(sender, body);
+    }
 
-    // Sempre atualiza a lista de conversas do servidor
-    refreshConversations();
-  }, [selectedConversation?.id, refreshConversations]);
+    // Invalida cache de mensagens
+    localStorage.removeItem(`messages_${conversationId}`);
+    localStorage.removeItem(`messages_${conversationId}_time`);
+  }, [refreshConversations, playNotificationSound, showBrowserNotification]);
 
-  // Callback para atualização de status de mensagem
+  // Callback para atualização de status de mensagem — atualiza in-place sem reload
   const handleMessageStatusUpdate = useCallback((messageId, status) => {
-    console.log('Status de mensagem atualizado:', { messageId, status });
+    const isDelivered = status === 'delivered' || status === 'read';
+    const isRead = status === 'read';
 
-    // Invalidar cache das mensagens para forçar recarregamento
-    if (selectedConversation?.id) {
-      const cacheKey = `messages_${selectedConversation.id}`;
-      localStorage.removeItem(cacheKey);
-      localStorage.removeItem(`${cacheKey}_time`);
+    const applyStatus = msgs => msgs.map(m =>
+      m.message_id === messageId ? { ...m, is_delivered: isDelivered, is_read: isRead } : m
+    );
 
-      // Limpar socketMessages ao recarregar
-      setSocketMessages(prev => ({
-        ...prev,
-        [selectedConversation.id]: []
-      }));
-
-      refreshMessages();
-    }
-
-    // Remover mensagem otimista se existir (mensagem foi confirmada pelo backend)
-    setOptimisticMessages(prev => {
-      const convMessages = prev[selectedConversation?.id] || [];
-      const hasOptimistic = convMessages.some(m => m.message_id === messageId);
-      if (hasOptimistic) {
-        return {
-          ...prev,
-          [selectedConversation?.id]: convMessages.filter(m => m.message_id !== messageId)
-        };
-      }
-      return prev;
+    setSocketMessages(prev => {
+      const updated = {};
+      for (const [id, msgs] of Object.entries(prev)) updated[id] = applyStatus(msgs);
+      return updated;
     });
 
-    // Recarregar mensagens se a conversa estiver aberta
-    if (selectedConversation?.id) {
-      refreshMessages();
-    }
-  }, [selectedConversation?.id, refreshMessages]);
+    setOptimisticMessages(prev => {
+      const updated = {};
+      for (const [id, msgs] of Object.entries(prev)) updated[id] = applyStatus(msgs);
+      return updated;
+    });
+  }, []);
 
   // Callback para atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
   const handleMessageUpdated = useCallback((conversationId, messageId, content, tempMessageId, realMessageId, message) => {
-    console.log('Mensagem atualizada:', { conversationId, messageId, content, tempMessageId, realMessageId, message });
 
     // Se tiver temp_message_id, atualizar mensagem otimista correspondente
     if (tempMessageId) {
@@ -207,7 +237,7 @@ function Chat() {
     }
   }, [loadingMessages, selectedConversation]);
 
-  const { connectionStatus, socket } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
+  const { connectionStatus, socket, emitReadConversation, emitPresence } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
   const { getPresence } = usePresence(socket);
 
   // Função para formatar o status de presença
@@ -248,25 +278,32 @@ function Chat() {
     }
   }, []);
 
-  // Detectar se está no final do scroll e lazy loading ao rolar para o topo
+  // Preserva scroll quando mensagens antigas são prepostas (loadMore)
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || prevScrollHeightRef.current === 0) return;
+    const newScrollHeight = container.scrollHeight;
+    container.scrollTop = newScrollHeight - prevScrollHeightRef.current;
+    prevScrollHeightRef.current = 0;
+  }, [messages]);
+
+  // Detectar fim do scroll e lazy loading ao rolar para o TOPO
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
-      const threshold = 100; // 100px de tolerância
-      setIsAtBottom(scrollHeight - scrollTop - clientHeight < threshold);
+      setIsAtBottom(scrollHeight - scrollTop - clientHeight < 100);
 
-      // Lazy loading: carregar mais mensagens quando rolar até 80% do topo
-      const scrollPercentage = scrollTop / (scrollHeight - clientHeight);
-      if (scrollPercentage > 0.8 && hasMore && !loadingMessages) {
-        console.log('Lazy loading triggered', { scrollPercentage, hasMore, loadingMessages });
+      // Lazy loading: perto do topo (< 150px) carrega mensagens mais antigas
+      if (scrollTop < 150 && hasMore && !loadingMessages) {
+        prevScrollHeightRef.current = scrollHeight; // salva antes de prepend
         loadMore();
       }
     };
 
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMore, loadingMessages, loadMore]);
 
@@ -288,7 +325,20 @@ function Chat() {
   useEffect(() => {
     fetchTags();
     fetchPredefinedMessages();
+    return () => {
+      clearTimeout(refreshConversationsTimerRef.current);
+      clearTimeout(presenceTimerRef.current);
+    };
   }, []);
+
+  // Contagem total de não lidas + título do browser
+  const totalUnread = useMemo(() =>
+    conversationsWithTags.reduce((acc, c) => acc + (c.unread_count || 0), 0)
+  , [conversationsWithTags]);
+
+  useEffect(() => {
+    document.title = totalUnread > 0 ? `(${totalUnread}) Analizap` : 'Analizap';
+  }, [totalUnread]);
 
   const fetchPredefinedMessages = async () => {
     try {
@@ -436,41 +486,30 @@ function Chat() {
 
     // Limpar mensagens otimistas da conversa anterior
     if (selectedConversation?.id !== conversation.id) {
-      setOptimisticMessages(prev => ({
-        ...prev,
-        [selectedConversation?.id]: []
-      }));
+      setOptimisticMessages(prev => ({ ...prev, [selectedConversation?.id]: [] }));
     }
 
-    // Se a conversa estiver em conversationsWithTags, use ela (tem tags carregadas)
     const conversationWithTags = conversationsWithTags.find(c => c.id === conversation.id);
     const selected = conversationWithTags || conversation;
     setSelectedConversation(selected);
 
-    // Abrir conversa no backend (atualiza nome do contato)
-    try {
-      await conversationsAPI.open(selected.id);
-    } catch (error) {
-      console.error('Erro ao abrir conversa:', error);
-    }
+    // Abrir conversa no backend em background
+    conversationsAPI.open(selected.id).catch(() => {});
 
-    // Marcar mensagens como lidas instantaneamente (remove bubble antes da confirmação)
+    // Marcar como lida imediatamente na sidebar
     if (selected.unread_count > 0) {
-      // Atualiza localmente para remover o bubble imediatamente
       setConversationsWithTags(prev => prev.map(conv =>
         conv.id === selected.id ? { ...conv, unread_count: 0 } : conv
       ));
 
-      // Envia confirmação em background
-      conversationsAPI.markAsRead(selected.id)
-        .then(() => {
-          console.log('Conversa marcada como lida no servidor');
-        })
-        .catch(error => {
-          console.error('Erro ao marcar mensagens como lidas:', error);
-          // Se falhar, recarrega para restaurar o estado correto
-          refreshConversations();
-        });
+      // Confirmar no servidor e no WhatsApp via socket
+      conversationsAPI.markAsRead(selected.id).catch(() => refreshConversations());
+
+      // Envia read receipt ao WhatsApp via socket (marca com duas setas azuis)
+      const lastMsgId = selected.last_message?.message_id || selected.last_message?.real_message_id;
+      if (lastMsgId && selected.phone) {
+        emitReadConversation(selected.phone, lastMsgId);
+      }
     }
   };
 
@@ -882,19 +921,32 @@ function Chat() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Lidar com mudança no input de mensagem (verificar atalhos)
+  // Lidar com mudança no input de mensagem (atalhos + presença)
   const handleMessageInputChange = (e) => {
     const value = e.target.value;
     setMessageInput(value);
 
+    // Emite "digitando..." ao contato e agenda pausa após 3s
+    if (selectedConversation?.phone) {
+      if (value.length > 0) {
+        emitPresence(selectedConversation.phone, 'composing');
+        clearTimeout(presenceTimerRef.current);
+        presenceTimerRef.current = setTimeout(() => {
+          emitPresence(selectedConversation.phone, 'paused');
+        }, 3000);
+      } else {
+        clearTimeout(presenceTimerRef.current);
+        emitPresence(selectedConversation.phone, 'paused');
+      }
+    }
+
+    // Atalhos de mensagens pré-definidas (/atalho)
     const words = value.split(' ');
     const lastWord = words[words.length - 1];
-
     if (lastWord.startsWith('/')) {
       const predefinedMessage = predefinedMessages.find(msg => msg.shortcut === lastWord);
       if (predefinedMessage) {
-        const newMessage = words.slice(0, -1).join(' ') + ' ' + predefinedMessage.content;
-        setMessageInput(newMessage);
+        setMessageInput(words.slice(0, -1).join(' ') + ' ' + predefinedMessage.content);
       }
     }
   };
@@ -904,20 +956,19 @@ function Chat() {
     if (!messageInput.trim() || !selectedConversation) return;
 
     const messageContent = messageInput.trim();
-    const metadata = replyingTo ? {
-      quoted: replyingTo
-    } : {};
+    const metadata = replyingTo ? { quoted: replyingTo } : {};
 
-    // Limpar o input e a resposta
     setMessageInput('');
     setReplyingTo(null);
 
+    // Para de emitir presença ao enviar
+    clearTimeout(presenceTimerRef.current);
+    if (selectedConversation?.phone) emitPresence(selectedConversation.phone, 'paused');
+
     try {
-      // Enviar para o servidor (o backend vai emitir a mensagem via Socket.io)
       await conversationsAPI.sendMessage(selectedConversation.id, messageContent, 'text', metadata);
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
-      // Restaurar o input em caso de erro
       setMessageInput(messageContent);
     }
   };
@@ -1471,8 +1522,21 @@ function Chat() {
               </div>
             </div>
 
-            {/* Área de mensagens */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4" style={{ backgroundColor: colors.bg }}>
+            {/* Área de mensagens + FAB scroll-to-bottom */}
+            <div className="flex-1 relative overflow-hidden" style={{ backgroundColor: colors.bg }}>
+            {!isAtBottom && (
+              <button
+                onClick={scrollToBottom}
+                className="absolute bottom-4 right-4 z-10 w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+                style={{ backgroundColor: colors.meMessageBg }}
+                title="Ir para o final"
+              >
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+            <div ref={messagesContainerRef} className="h-full overflow-y-auto p-4">
               {loadingConversation ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
@@ -1507,6 +1571,7 @@ function Chat() {
                   })}
                 </>
               )}
+            </div>
             </div>
 
             {/* Input de mensagem */}

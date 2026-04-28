@@ -18,31 +18,36 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
   const renderDeliveryStatus = () => {
     if (!isMe) return null;
 
-    // Erro na entrega = ícone de alerta vermelho
     if (delivery_error) {
+      return <AlertCircle size={14} className="text-red-400 ml-1 flex-shrink-0" title={delivery_error} />;
+    }
+
+    // Enviando (sem entrega ainda) — check simples cinza
+    if (!is_delivered && !is_read) {
       return (
-        <AlertCircle size={16} className="text-red-500 ml-1" title={delivery_error} />
+        <svg className="w-4 h-4 ml-1 flex-shrink-0" viewBox="0 0 16 15" fill="none">
+          <path d="M15 1L5 13L1 9" stroke="#8696a0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       );
     }
 
-    // Não entregue = bolinha transparente com bordas cinza
-    if (!is_delivered) {
-      return (
-        <div className="w-2 h-2 rounded-full border-2 border-gray-400 bg-transparent ml-1"></div>
-      );
-    }
-
-    // Entregue e não lida = bolinha cinza preenchida
+    // Entregue — dois checks cinza
     if (is_delivered && !is_read) {
       return (
-        <div className="w-2 h-2 rounded-full bg-gray-400 ml-1"></div>
+        <svg className="w-4 h-4 ml-1 flex-shrink-0" viewBox="0 0 18 15" fill="none">
+          <path d="M17 1L7 13L3 9" stroke="#8696a0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M11 1L1 13" stroke="#8696a0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       );
     }
 
-    // Lida = bolinha azul preenchida
+    // Lida — dois checks azuis
     if (is_read) {
       return (
-        <div className="w-2 h-2 rounded-full bg-blue-400 ml-1"></div>
+        <svg className="w-4 h-4 ml-1 flex-shrink-0" viewBox="0 0 18 15" fill="none">
+          <path d="M17 1L7 13L3 9" stroke="#53bdeb" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M11 1L1 13" stroke="#53bdeb" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       );
     }
 
@@ -92,10 +97,14 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
   const renderMessageContent = () => {
     // Se estiver em loading, mostrar indicador
     if (metadata?.loading) {
+      // Skeleton de loading para mídia
+      const mediaLabel = message_type === 'image' ? 'Imagem' : message_type === 'video' ? 'Vídeo' : message_type === 'audio' ? 'Áudio' : 'Arquivo';
       return (
-        <div className="flex items-center space-x-3 py-4">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: isMe ? colors.meMessageText : colors.text }}></div>
-          <p className="text-sm" style={{ color: isMe ? colors.meMessageText : colors.text }}>Enviando {message_type === 'image' ? 'imagem' : message_type === 'video' ? 'vídeo' : message_type === 'audio' ? 'áudio' : 'arquivo'}...</p>
+        <div className="flex items-center space-x-3 py-3 px-1">
+          <div className="animate-pulse rounded-lg flex items-center space-x-3" style={{ color: isMe ? colors.meMessageText : colors.textSecondary }}>
+            <div className="w-8 h-8 rounded-full animate-spin border-2 border-transparent" style={{ borderTopColor: isMe ? 'rgba(255,255,255,0.6)' : colors.textSecondary }} />
+            <span className="text-sm opacity-70">Enviando {mediaLabel}...</span>
+          </div>
         </div>
       );
     }
@@ -165,20 +174,23 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
 
       case 'audio':
         return (
-          <div className="flex items-center space-x-2">
+          <div className="space-y-1">
             {renderQuoted()}
-            <Music className="w-8 h-8" style={{ color: isMe ? colors.meMessageText : colors.text }} />
-            <audio
-              src={content}
-              controls
-              className="w-64"
-              controlsList="nodownload"
-            />
-            {metadata?.seconds && (
-              <span className="text-xs" style={{ color: isMe ? colors.meMessageText : colors.text }}>
-                {Math.floor(metadata.seconds / 60)}:{(metadata.seconds % 60).toString().padStart(2, '0')}
-              </span>
-            )}
+            <div className="flex items-center space-x-2">
+              <Music className="w-5 h-5 flex-shrink-0" style={{ color: isMe ? colors.meMessageText : colors.text }} />
+              <audio
+                src={content}
+                controls
+                className="flex-1 min-w-0"
+                style={{ maxWidth: '240px', height: '32px' }}
+                controlsList="nodownload noplaybackrate"
+              />
+              {metadata?.seconds && (
+                <span className="text-xs flex-shrink-0" style={{ color: isMe ? colors.meMessageText : colors.textSecondary }}>
+                  {Math.floor(metadata.seconds / 60)}:{(metadata.seconds % 60).toString().padStart(2, '0')}
+                </span>
+              )}
+            </div>
           </div>
         );
 
@@ -309,7 +321,7 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
     <>
       <div
         id={`message-${message.message_id}`}
-        className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-4 items-center group`}
+        className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-1 items-center group`}
         onMouseEnter={() => setShowActions(true)}
         onMouseLeave={() => setShowActions(false)}
       >

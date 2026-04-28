@@ -93,58 +93,48 @@ export function useConversations() {
   };
 }
 
+const PAGE_SIZE = 50;
+const MSG_CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
+
 export function useConversationMessages(conversationId) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
-  const CACHE_SIZE = 20; // Cache de 20 mensagens
 
   const fetchMessages = useCallback(async (currentOffset = 0, append = false) => {
-    console.log('fetchMessages chamada', { conversationId, currentOffset, append });
+    if (!conversationId) return;
 
-    if (!conversationId) {
-      console.warn('fetchMessages: conversationId é null, retornando');
-      return;
-    }
-
-    if (!append) {
-      setLoading(true);
-    }
+    if (!append) setLoading(true);
     setError(null);
 
     try {
-      // Tenta buscar do cache primeiro (apenas para a primeira carga)
       const cacheKey = `messages_${conversationId}`;
-      const cachedData = localStorage.getItem(cacheKey);
-      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-      const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
-      console.log('fetchMessages: cache check', { hasCache: !!cachedData, hasCacheTime: !!cacheTime });
-
-      // Se tem cache válido e não é append, usa primeiro
-      if (cachedData && cacheTime && !append) {
-        const cacheAge = Date.now() - parseInt(cacheTime);
-        if (cacheAge < CACHE_DURATION) {
-          console.log('fetchMessages: usando cache', { cacheAge });
-          const cachedMessages = JSON.parse(cachedData);
-          setMessages(cachedMessages);
-          setOffset(cachedMessages.length);
-          setHasMore(cachedMessages.length >= 50); // Se tem 50, pode ter mais
-          setLoading(false);
-          return;
+      // Cache apenas na primeira carga (sem append)
+      if (!append && currentOffset === 0) {
+        const cachedData = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+        if (cachedData && cacheTime) {
+          const cacheAge = Date.now() - parseInt(cacheTime);
+          if (cacheAge < MSG_CACHE_DURATION) {
+            const cachedMessages = JSON.parse(cachedData);
+            setMessages(cachedMessages);
+            setOffset(cachedMessages.length);
+            setHasMore(cachedMessages.length >= PAGE_SIZE);
+            setLoading(false);
+            return;
+          }
         }
       }
 
-      // Se não tem cache ou expirou, ou é append, busca do servidor
-      console.log('fetchMessages: buscando do servidor', { currentOffset, limit: CACHE_SIZE });
-      const response = await conversationsAPI.getMessages(conversationId, CACHE_SIZE, currentOffset);
-      console.log('fetchMessages: resposta do servidor', { messageCount: response.data.messages?.length });
+      const response = await conversationsAPI.getMessages(conversationId, PAGE_SIZE, currentOffset);
       const newMessages = response.data.messages || [];
 
       if (append) {
-        setMessages(prev => [...prev, ...newMessages]);
+        // Mensagens mais antigas vão ao INÍCIO (prepend), mantendo scroll
+        setMessages(prev => [...newMessages, ...prev]);
       } else {
         setMessages(newMessages);
         localStorage.setItem(cacheKey, JSON.stringify(newMessages));
@@ -152,20 +142,17 @@ export function useConversationMessages(conversationId) {
       }
 
       setOffset(currentOffset + newMessages.length);
-      setHasMore(newMessages.length >= CACHE_SIZE);
+      setHasMore(newMessages.length >= PAGE_SIZE);
     } catch (err) {
       setError('Erro ao carregar mensagens');
       console.error('Erro ao carregar mensagens:', err);
     } finally {
       setLoading(false);
     }
-  }, [conversationId, CACHE_SIZE]);
+  }, [conversationId]);
 
   const loadMore = useCallback(() => {
-    if (!loading && hasMore) {
-      console.log('loadMore chamado', { offset });
-      fetchMessages(offset, true);
-    }
+    if (!loading && hasMore) fetchMessages(offset, true);
   }, [loading, hasMore, offset, fetchMessages]);
 
   useEffect(() => {

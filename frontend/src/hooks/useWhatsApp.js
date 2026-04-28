@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { connectionAPI } from '../services/api';
 
@@ -11,77 +11,55 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Conecta ao Socket.io
+  // Refs para callbacks — evita recriar o socket a cada render
+  const onMessageRef = useRef(onMessageReceived);
+  const onStatusRef = useRef(onMessageStatusUpdate);
+  const onUpdatedRef = useRef(onMessageUpdated);
+  useEffect(() => { onMessageRef.current = onMessageReceived; }, [onMessageReceived]);
+  useEffect(() => { onStatusRef.current = onMessageStatusUpdate; }, [onMessageStatusUpdate]);
+  useEffect(() => { onUpdatedRef.current = onMessageUpdated; }, [onMessageUpdated]);
+
+  // Socket criado UMA VEZ — deps array vazio intencional
   useEffect(() => {
     const socketInstance = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
-      withCredentials: true
+      withCredentials: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
     });
 
-    socketInstance.on('connect', () => {
-      console.log('Socket.io conectado');
-      setIsConnected(true);
-    });
+    socketInstance.on('connect', () => setIsConnected(true));
+    socketInstance.on('disconnect', () => setIsConnected(false));
 
-    socketInstance.on('disconnect', () => {
-      console.log('Socket.io desconectado');
-      setIsConnected(false);
-    });
-
-    // Evento de QR Code
     socketInstance.on('whatsapp:qr', ({ qr }) => {
-      console.log('QR Code recebido');
       setQrCode(qr);
       setConnectionStatus('qr_required');
     });
 
-    // Evento de status da conexão
     socketInstance.on('whatsapp:status', ({ status }) => {
-      console.log('Status da conexão:', status);
       setConnectionStatus(status);
-      if (status === 'connected') {
-        setQrCode(null);
-      }
+      if (status === 'connected') setQrCode(null);
     });
 
-    // Evento de nova mensagem
     socketInstance.on('whatsapp:message', ({ conversation_id, message, is_temp }) => {
-      if (onMessageReceived) {
-        onMessageReceived(conversation_id, message, is_temp || false);
-      }
+      onMessageRef.current?.(conversation_id, message, is_temp || false);
     });
 
-    // Evento de atualização de status de mensagem
     socketInstance.on('whatsapp:message_status', ({ message_id, status }) => {
-      console.log('Status de mensagem atualizado:', message_id, status);
-      if (onMessageStatusUpdate) {
-        onMessageStatusUpdate(message_id, status);
-      }
+      onStatusRef.current?.(message_id, status);
     });
 
-    // Evento de atualização de mensagem (quando mídia é processada ou real_message_id atualizado)
     socketInstance.on('whatsapp:message_updated', ({ conversation_id, message_id, content, temp_message_id, real_message_id, message }) => {
-      console.log('Mensagem atualizada:', { conversation_id, message_id, content, temp_message_id, real_message_id, message });
-      if (onMessageUpdated) {
-        onMessageUpdated(conversation_id, message_id, content, temp_message_id, real_message_id, message);
-      }
+      onUpdatedRef.current?.(conversation_id, message_id, content, temp_message_id, real_message_id, message);
     });
 
-    // Evento de falha na entrega de mensagem
-    socketInstance.on('whatsapp:message_failed', ({ conversation_id, message_id, error }) => {
-      console.log('Falha na entrega de mensagem:', { conversation_id, message_id, error });
-      if (onMessageReceived) {
-        // Recarregar mensagens para mostrar o erro
-        onMessageReceived(conversation_id, null, false);
-      }
+    socketInstance.on('whatsapp:message_failed', ({ conversation_id }) => {
+      onMessageRef.current?.(conversation_id, null, false);
     });
 
     setSocket(socketInstance);
-
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, [onMessageReceived, onMessageStatusUpdate, onMessageUpdated]);
+    return () => { socketInstance.disconnect(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carrega status inicial
   useEffect(() => {
@@ -151,6 +129,20 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     }
   }, []);
 
+  // Emite leitura ao WhatsApp quando o atendente abre a conversa
+  const emitReadConversation = useCallback((phone, last_message_id) => {
+    if (socket?.connected && phone && last_message_id) {
+      socket.emit('read_conversation', { phone, last_message_id });
+    }
+  }, [socket]);
+
+  // Emite presença (composing / paused) ao contato
+  const emitPresence = useCallback((phone, presence) => {
+    if (socket?.connected && phone) {
+      socket.emit('send_presence', { phone, presence });
+    }
+  }, [socket]);
+
   return {
     connectionStatus,
     qrCode,
@@ -162,6 +154,8 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     removeSession,
     getQR,
     refreshQR,
-    loadStatus
+    loadStatus,
+    emitReadConversation,
+    emitPresence
   };
 }
