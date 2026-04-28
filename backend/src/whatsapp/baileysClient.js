@@ -714,67 +714,31 @@ function setupEvents(socket) {
 
   // Evento de atualização de mensagens
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.info('messages.upsert recebido:', {
-      type,
-      count: messages.length,
-      messages: messages
-    });
+    logger.info('messages.upsert recebido:', { type, count: messages.length, messages });
 
-    // Se é histórico (append), usa batching
-    if (type === 'append' || messages.length > 10) {
-      for (const message of messages) {
-        // Não adicionar mensagens enviadas por nós ao batching - elas são processadas separadamente
-        if (!message.key.fromMe) {
-          // Adicionar ao batch (processar mesmo notify sem conteúdo)
-          addToMessageBatch(message, type);
-        } else {
-          // Processar mensagem enviada por nós individualmente
-          await processSentMessage(message, syncPeriodDays);
-        }
-      }
-      return;
-    }
-
-    // Se é mensagem individual recente, processa imediatamente
     for (const message of messages) {
-      const isFromMe = message.key.fromMe;
-      const uniqueId = await getMessageUniqueId(message);
+      const remoteJid = message.key?.remoteJid;
 
-      if (isFromMe) {
-        // Mensagem enviada por nós - processar sempre (notify e append)
-        // A função processSentMessage já verifica duplicação internamente
+      // Filtro imediato: ignorar grupos, broadcasts, newsletters e protocolos
+      if (!remoteJid || isGroupOrBroadcast(remoteJid)) continue;
+      if (message.message?.protocolMessage) continue;
+
+      if (message.key.fromMe) {
+        // Mensagem enviada por nós: processSentMessage verifica duplicação internamente
         await processSentMessage(message, syncPeriodDays);
-        return;
+        continue;
       }
-      // Mensagem recebida com notify - verificar duplicação antes de processar
-      else if (!isFromMe && type === 'notify') {
-        const hasContent = message.message && Object.keys(message.message).length > 0;
-        
-        // Se tiver conteúdo, verificar se já foi processada anteriormente
-        if (hasContent) {
-          const alreadyExists = await checkMessageExists(uniqueId);
-          if (!alreadyExists) {
-            await handleIncomingMessage(message, true); // true = processar
-          }
-        } else {
-          // Sem conteúdo - processar mesmo assim (pode ser append depois)
-          await handleIncomingMessage(message, true); // true = processar
-        }
-      } else if (!isFromMe && type === 'append') {
-        // Mensagem recebida com append - verificar se já foi processada pelo notify
-        // Se foi processado pelo notify, ignorar o append para evitar duplicação
-        const wasProcessedByNotify = await checkMessageExists(uniqueId);
-        if (!wasProcessedByNotify) {
-          await handleIncomingMessage(message, true); // true = processar
-        }
-      } else if (!isFromMe && type !== 'append') {
-        // Mensagem recebida com outro tipo - verificar duplicação antes de processar
-        const wasProcessed = await checkMessageExists(uniqueId);
-        if (!wasProcessed) {
-          await handleIncomingMessage(message, true); // true = processar
-        }
+
+      // Mensagem recebida:
+      // - append (histórico) → batch para não sobrecarregar o banco
+      // - notify (tempo real) → processar imediatamente com dedup
+      if (type === 'append') {
+        addToMessageBatch(message, type);
       } else {
-        // Mensagem ignorada (append será processado pelo batching)
+        const uniqueId = await getMessageUniqueId(message);
+        if (!(await checkMessageExists(uniqueId))) {
+          await handleIncomingMessage(message, true);
+        }
       }
     }
   });
@@ -1224,6 +1188,9 @@ async function handleIncomingMessage(message, shouldProcess = true) {
       return;
     }
 
+    // Ignorar mensagens de protocolo
+    if (msg.protocolMessage) return;
+
     // Extrair tipo de mensagem para log
     let messageType = 'texto';
     if (msg.conversation || msg.extendedTextMessage) {
@@ -1279,6 +1246,15 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     const isMedia = msg.imageMessage || msg.audioMessage || msg.videoMessage ||
                     msg.documentMessage || msg.stickerMessage;
 
+    // Extrair contextInfo (mensagem citada) — presente em qualquer tipo de mensagem
+    const contextInfo = msg.extendedTextMessage?.contextInfo ||
+                        msg.imageMessage?.contextInfo ||
+                        msg.audioMessage?.contextInfo ||
+                        msg.videoMessage?.contextInfo ||
+                        msg.documentMessage?.contextInfo ||
+                        msg.stickerMessage?.contextInfo;
+    const quotedMessageId = contextInfo?.stanzaId || null;
+
     // Extrair informações básicas da mensagem para emitir imediatamente (apenas para texto)
     const conversation = await getOrCreateConversation(
       remoteJid,
@@ -1292,7 +1268,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     // Emitir mensagem temporária apenas para mensagens de texto (não para mídia)
     if (io && conversation && !isMedia) {
       const tempMessage = {
-        id: null, // Será preenchido após salvar
+        id: null,
         message_id: messageId,
         conversation_id: conversation.id,
         from_me: false,
@@ -1300,13 +1276,14 @@ async function handleIncomingMessage(message, shouldProcess = true) {
         content: msg.conversation || msg.extendedTextMessage?.text || '',
         timestamp: new Date(messageTimestamp * 1000).toISOString(),
         is_read: false,
-        is_delivered: false
+        is_delivered: false,
+        quoted_message_id: quotedMessageId
       };
 
       io.emit('whatsapp:message', {
         conversation_id: conversation.id,
         message: tempMessage,
-        is_temp: true // Flag para indicar que é mensagem temporária
+        is_temp: true
       });
     }
 
