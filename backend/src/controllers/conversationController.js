@@ -14,6 +14,8 @@ import {
   sendWhatsAppAttachment,
   sendWhatsAppLocation,
   sendWhatsAppReaction,
+  togglePin,
+  addUserToConversation,
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { getSocket, getIO } from '../whatsapp/baileysClient.js';
@@ -125,6 +127,26 @@ export async function markMultipleAsRead(req, res) {
 }
 
 /**
+ * Alterna fixação de conversa
+ */
+export async function togglePinRoute(req, res) {
+  try {
+    const { conversationId } = req.params;
+    const { isPinned } = req.body;
+
+    await togglePin(conversationId, isPinned);
+
+    res.json({
+      success: true,
+      message: isPinned ? 'Conversa fixada' : 'Conversa desafixada'
+    });
+  } catch (error) {
+    logger.error('Erro ao alterar pin da conversa:', error);
+    res.status(500).json({ error: 'Erro ao alterar pin da conversa' });
+  }
+}
+
+/**
  * Fecha uma conversa
  */
 export async function closeConversationRoute(req, res) {
@@ -150,10 +172,17 @@ export async function closeConversationRoute(req, res) {
 export async function openConversationRoute(req, res) {
   try {
     const { conversationId } = req.params;
-
+    const userId = req.user?.id;
 
     const sock = getSocket();
     await openConversation(conversationId, sock);
+
+    // Se for reabertura manual (botão "Reabrir"), registra usuário como participante
+    // e define status como 'open' imediatamente
+    const { isReopen } = req.body;
+    if (isReopen && userId) {
+      await addUserToConversation(conversationId, userId);
+    }
 
     res.json({
       success: true,
@@ -233,11 +262,15 @@ export async function sendMessage(req, res) {
       timestamp: new Date().toISOString()
     });
 
-    // Atualizar last_message_at da conversa
+    // Atualizar last_message_at e registrar usuário como participante (tab "Minhas")
     await supabase
       .from('conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
+
+    if (req.user?.id) {
+      addUserToConversation(conversationId, req.user.id).catch(() => {});
+    }
 
     // Emitir mensagem para o frontend como temporária (ID será atualizado depois)
     const io = getIO();
@@ -519,6 +552,11 @@ export async function sendAttachment(req, res) {
       .from('conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
+
+    // Registrar usuário como participante da conversa (tab "Minhas")
+    if (req.user?.id) {
+      addUserToConversation(conversationId, req.user.id).catch(() => {});
+    }
 
     // Emitir mensagem para o frontend (não é temporária)
     const io = getIO();

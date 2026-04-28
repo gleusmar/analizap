@@ -8,6 +8,7 @@ import {
   closeConversationRoute,
   openConversationRoute,
   updateContactNameRoute,
+  togglePinRoute,
   sendMessage,
   sendAttachment,
   sendLocation,
@@ -36,6 +37,9 @@ router.post('/conversations/:conversationId/read', markAsRead);
 
 // Marcar múltiplas conversas como lidas
 router.post('/conversations/mark-multiple-read', markMultipleAsRead);
+
+// Alternar pin de conversa
+router.post('/conversations/:conversationId/pin', togglePinRoute);
 
 // Fechar conversa
 router.post('/conversations/:conversationId/close', closeConversationRoute);

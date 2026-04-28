@@ -126,6 +126,8 @@ export const conversationsAPI = {
   markMultipleAsRead: (conversationIds) => api.post('/conversations/mark-multiple-read', { conversationIds }),
   close: (conversationId) => api.post(`/conversations/${conversationId}/close`),
   open: (conversationId) => api.post(`/conversations/${conversationId}/open`),
+  reopen: (conversationId) => api.post(`/conversations/${conversationId}/open`, { isReopen: true }),
+  togglePin: (conversationId, isPinned) => api.post(`/conversations/${conversationId}/pin`, { isPinned }),
   updateContactName: (conversationId, contactName) =>
     api.put(`/conversations/${conversationId}/contact-name`, { contactName }),
   sendMessage: (conversationId, content, messageType = 'text', metadata = {}) =>

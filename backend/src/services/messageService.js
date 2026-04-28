@@ -245,11 +245,11 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       // Se a conversa já existe, retorna imediatamente (não verifica período)
       // Isso permite que mensagens antigas sejam adicionadas a conversas existentes
 
-      // Se a conversa estava fechada, reabre
+      // Se a conversa estava fechada, reabre com status 'pending' (aguardando agente)
       if (!existingConversation.is_open) {
         const { error: updateError } = await supabase
           .from('conversations')
-          .update({ is_open: true })
+          .update({ is_open: true, status: 'pending', participant_user_ids: [] })
           .eq('id', existingConversation.id);
 
         if (updateError) {
@@ -327,9 +327,11 @@ export async function getOrCreateConversation(jid, contactName = null, profilePi
       .from('conversations')
       .insert({
         phone,
-        contact_name: contactName || phone, // Usa phone como fallback se não tiver nome
+        contact_name: contactName || phone,
         profile_picture_url: profilePictureUrl,
         is_open: true,
+        status: 'pending',
+        participant_user_ids: [],
         last_message_at: lastMessageAt
       })
       .select()
@@ -1029,13 +1031,68 @@ export async function markMultipleConversationsAsRead(conversationIds) {
 }
 
 /**
+ * Altera o status de fixação de uma conversa
+ */
+export async function togglePin(conversationId, isPinned) {
+  try {
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        is_pinned: isPinned,
+        pinned_at: isPinned ? new Date().toISOString() : null
+      })
+      .eq('id', conversationId);
+
+    if (error) {
+      logger.error('Erro ao alterar pin da conversa:', error);
+      throw error;
+    }
+  } catch (error) {
+    logger.error('Erro ao alterar pin da conversa:', error);
+    throw error;
+  }
+}
+
+/**
+ * Adiciona um usuário à lista de participantes de uma conversa e atualiza status para 'open'
+ */
+export async function addUserToConversation(conversationId, userId) {
+  if (!userId) return;
+  try {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('participant_user_ids, status')
+      .eq('id', conversationId)
+      .single();
+
+    if (!conv) return;
+
+    const existing = conv.participant_user_ids || [];
+    const updated = existing.includes(userId) ? existing : [...existing, userId];
+
+    const { error } = await supabase
+      .from('conversations')
+      .update({
+        participant_user_ids: updated,
+        status: 'open',
+        is_open: true
+      })
+      .eq('id', conversationId);
+
+    if (error) logger.error('Erro ao adicionar participante:', error);
+  } catch (error) {
+    logger.error('Erro ao adicionar participante:', error);
+  }
+}
+
+/**
  * Fecha uma conversa
  */
 export async function closeConversation(conversationId) {
   try {
     const { error } = await supabase
       .from('conversations')
-      .update({ is_open: false })
+      .update({ is_open: false, status: 'closed', participant_user_ids: [] })
       .eq('id', conversationId);
 
     if (error) {

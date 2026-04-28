@@ -21,7 +21,7 @@ function Chat() {
 
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
-  const [activeTab, setActiveTab] = useState('open');
+  const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messageInput, setMessageInput] = useState('');
@@ -129,7 +129,19 @@ function Chat() {
       }
       const isActive = selectedConversationRef.current?.id === conversationId;
       const updated = [...prev];
-      const conv = { ...updated[idx], last_message: message, last_message_at: message.timestamp, unread_count: isActive ? 0 : (updated[idx].unread_count || 0) + 1 };
+      const prevConv = updated[idx];
+      // Se mensagem é do cliente e conversa estava fechada, passa para pending
+      const newStatus = (!message.from_me && !prevConv.is_open)
+        ? 'pending'
+        : prevConv.status;
+      const conv = {
+        ...prevConv,
+        last_message: message,
+        last_message_at: message.timestamp,
+        unread_count: isActive ? 0 : (prevConv.unread_count || 0) + 1,
+        is_open: newStatus === 'pending' ? true : prevConv.is_open,
+        status: newStatus
+      };
       updated.splice(idx, 1);
       const firstNonPinned = updated.findIndex(c => !c.is_pinned);
       updated.splice(firstNonPinned === -1 ? 0 : firstNonPinned, 0, conv);
@@ -231,11 +243,12 @@ function Chat() {
   }, [selectedConversation?.id]);
 
   // Desativar loading quando mensagens carregarem
+  // Usa apenas loadingMessages como dep para evitar race condition com selectedConversation
   useEffect(() => {
-    if (!loadingMessages && selectedConversation) {
+    if (!loadingMessages) {
       setLoadingConversation(false);
     }
-  }, [loadingMessages, selectedConversation]);
+  }, [loadingMessages]);
 
   const { connectionStatus, socket, emitReadConversation, emitPresence } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
   const { getPresence } = usePresence(socket);
@@ -314,12 +327,19 @@ function Chat() {
     }
   }, [selectedConversation, scrollToBottom]);
 
-  // Scrollar para o final quando mensagens mudam (se estiver no final)
+  // Scrollar para o final quando mensagens do backend mudam (se estiver no final)
   useEffect(() => {
     if (isAtBottom && messages.length > 0) {
       scrollToBottom();
     }
   }, [messages, isAtBottom, scrollToBottom]);
+
+  // Scrollar para o final quando novas mensagens chegam via socket
+  useEffect(() => {
+    if (isAtBottom) {
+      scrollToBottom();
+    }
+  }, [socketMessages, isAtBottom, scrollToBottom]);
 
   // Carregar tags disponíveis e tags de todas as conversas
   useEffect(() => {
@@ -516,27 +536,43 @@ function Chat() {
     }
   };
 
-  const handleCloseConversation = () => {
+  const handleCloseConversation = async () => {
     if (!selectedConversation) return;
 
+    const id = selectedConversation.id;
     const updatedConversations = conversationsWithTags.map(conv =>
-      conv.id === selectedConversation.id
-        ? { ...conv, is_open: false }
-        : conv
+      conv.id === id ? { ...conv, is_open: false, status: 'closed', participant_user_ids: [] } : conv
     );
     setConversationsWithTags(updatedConversations);
     setSelectedConversation(null);
+
+    try {
+      await conversationsAPI.close(id);
+    } catch (error) {
+      console.error('Erro ao fechar conversa:', error);
+      toast.error('Erro ao fechar conversa');
+      refreshConversations();
+    }
   };
 
-  const handleOpenConversation = () => {
+  const handleOpenConversation = async () => {
     if (!selectedConversation) return;
 
+    const id = selectedConversation.id;
     const updatedConversations = conversationsWithTags.map(conv =>
-      conv.id === selectedConversation.id
-        ? { ...conv, is_open: true }
-        : conv
+      conv.id === id ? { ...conv, is_open: true, status: 'open', participant_user_ids: [user?.id].filter(Boolean) } : conv
     );
     setConversationsWithTags(updatedConversations);
+    const updatedSelected = updatedConversations.find(c => c.id === id);
+    if (updatedSelected) setSelectedConversation(updatedSelected);
+
+    try {
+      await conversationsAPI.reopen(id);
+    } catch (error) {
+      console.error('Erro ao abrir conversa:', error);
+      toast.error('Erro ao abrir conversa');
+      refreshConversations();
+    }
   };
 
   // Funções para seleção múltipla
@@ -598,33 +634,49 @@ function Chat() {
 
     const isPinned = !selectedConversation.is_pinned;
     const pinnedAt = isPinned ? new Date().toISOString() : null;
+    const id = selectedConversation.id;
 
     const updatedConversations = conversationsWithTags.map(conv =>
-      conv.id === selectedConversation.id
-        ? {
-            ...conv,
-            is_pinned: isPinned,
-            pinned_at: pinnedAt
-          }
-        : conv
+      conv.id === id ? { ...conv, is_pinned: isPinned, pinned_at: pinnedAt } : conv
     );
     setConversationsWithTags(updatedConversations);
-    const updatedSelected = updatedConversations.find(c => c.id === selectedConversation.id);
-    if (updatedSelected) {
-      setSelectedConversation(updatedSelected);
+    const updatedSelected = updatedConversations.find(c => c.id === id);
+    if (updatedSelected) setSelectedConversation(updatedSelected);
+    toast.success(isPinned ? 'Conversa fixada' : 'Conversa desafixada');
+
+    try {
+      await conversationsAPI.togglePin(id, isPinned);
+    } catch (error) {
+      console.error('Erro ao alterar pin:', error);
+      toast.error('Erro ao alterar fixação');
+      refreshConversations();
     }
-    toast.success(updatedSelected.is_pinned ? 'Conversa fixada' : 'Conversa desafixada');
   };
+
+  // Contador de conversas pendentes para o badge
+  const pendingCount = useMemo(() => {
+    return conversationsWithTags.filter(c => c.status === 'pending').length;
+  }, [conversationsWithTags]);
 
   // Filtrar conversas por aba e busca
   const filteredConversations = useMemo(() => {
-    // Sempre usar conversationsWithTags (já é inicializado com conversations ou array vazio)
     const conversationsToFilter = conversationsWithTags;
     return conversationsToFilter
       .filter(conv => {
         // Filtrar por aba
-        if (activeTab === 'open' && !conv.is_open) return false;
-        if (activeTab === 'closed' && conv.is_open) return false;
+        if (activeTab === 'pending') {
+          if (conv.status !== 'pending') return false;
+        } else if (activeTab === 'open') {
+          // Abertas = todas que não estão fechadas
+          if (!conv.is_open) return false;
+        } else if (activeTab === 'mine') {
+          // Minhas = abertas onde o usuário atual é participante
+          if (!conv.is_open) return false;
+          const participants = conv.participant_user_ids || [];
+          if (!participants.includes(user?.id)) return false;
+        } else if (activeTab === 'closed') {
+          if (conv.is_open) return false;
+        }
 
         // Filtrar por busca
         if (searchQuery) {
@@ -1255,34 +1307,30 @@ function Chat() {
               <ArrowUpDown size={18} />
             </button>
           </div>
-          <div className="flex space-x-2 mb-3">
-            <button
-              onClick={() => setActiveTab('open')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'open' ? 'bg-emerald-600 text-white' : ''
-              }`}
-              style={{ backgroundColor: activeTab !== 'open' ? colors.bg : undefined, color: activeTab !== 'open' ? colors.textSecondary : 'white' }}
-            >
-              Abertas
-            </button>
-            <button
-              onClick={() => setActiveTab('closed')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'closed' ? 'bg-emerald-600 text-white' : ''
-              }`}
-              style={{ backgroundColor: activeTab !== 'closed' ? colors.bg : undefined, color: activeTab !== 'closed' ? colors.textSecondary : 'white' }}
-            >
-              Fechadas
-            </button>
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'all' ? 'bg-emerald-600 text-white' : ''
-              }`}
-              style={{ backgroundColor: activeTab !== 'all' ? colors.bg : undefined, color: activeTab !== 'all' ? colors.textSecondary : 'white' }}
-            >
-              Todas
-            </button>
+          <div className="flex space-x-1 mb-3">
+            {[
+              { key: 'pending', label: 'Pendentes', badge: pendingCount },
+              { key: 'open',    label: 'Abertas',   badge: 0 },
+              { key: 'mine',    label: 'Minhas',    badge: 0 },
+              { key: 'closed',  label: 'Fechadas',  badge: 0 },
+            ].map(({ key, label, badge }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className="relative flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: activeTab === key ? '#059669' : colors.bg,
+                  color: activeTab === key ? 'white' : colors.textSecondary
+                }}
+              >
+                {label}
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
           {/* Botão para encerrar múltiplas conversas */}
           {isMultiSelectMode && selectedConversations.size > 0 && (
@@ -1572,12 +1620,44 @@ function Chat() {
                       />
                     );
                   })}
+
+                  {/* Bubble de "digitando..." */}
+                  {(() => {
+                    const p = getPresence(selectedConversation?.phone);
+                    const isTyping = p?.presence === 'composing' || p?.presence === 'recording';
+                    if (!isTyping) return null;
+                    return (
+                      <div className="flex items-end mb-1">
+                        <div className="px-4 py-2 rounded-2xl rounded-bl-sm text-sm max-w-xs" style={{ backgroundColor: colors.bgTertiary }}>
+                          <div className="flex items-center space-x-1">
+                            <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: colors.textSecondary, animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: colors.textSecondary, animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: colors.textSecondary, animationDelay: '300ms' }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
             </div>
 
+            {/* Banner: conversa fechada */}
+            {!selectedConversation?.is_open && (
+              <div className="p-4 flex-shrink-0 flex items-center justify-center gap-3 border-t" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+                <span className="text-sm" style={{ color: colors.textSecondary }}>Conversa encerrada</span>
+                <button
+                  onClick={handleOpenConversation}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  Reabrir
+                </button>
+              </div>
+            )}
+
             {/* Input de mensagem */}
+            {selectedConversation?.is_open && (
             <div className="p-3 flex-shrink-0 relative" style={{ backgroundColor: colors.bgSecondary }}>
               {/* Indicador de resposta */}
               {replyingTo && (
@@ -1710,6 +1790,7 @@ function Chat() {
                 </div>
               )}
             </div>
+            )}
 
             {/* Modal de Legenda */}
             {showCaptionModal && (

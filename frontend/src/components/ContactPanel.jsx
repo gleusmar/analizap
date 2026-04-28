@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { X, User, Phone, Calendar, Clock } from 'lucide-react';
 import { conversationsAPI } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function ContactPanel({ conversation, onClose, onUpdate }) {
+  const { colors } = useTheme();
   const [customName, setCustomName] = useState(conversation?.custom_name || '');
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,22 +57,23 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
 
   return (
     <>
-    <div className="h-full w-96 bg-[#111b21] border-l border-[#202c33] shadow-xl flex flex-col">
+    <div className="h-full w-96 shadow-xl flex flex-col border-l" style={{ backgroundColor: colors.bg, borderColor: colors.border }}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[#202c33] bg-[#202c33]">
-        <h2 className="text-white font-semibold text-lg">Informações do Contato</h2>
+      <div className="flex items-center justify-between p-4 border-b" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+        <h2 className="font-semibold text-lg" style={{ color: colors.text }}>Informações do Contato</h2>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-white transition-colors"
+          className="transition-colors hover:text-emerald-500"
+          style={{ color: colors.textSecondary }}
         >
           <X size={24} />
         </button>
       </div>
 
       {/* Avatar grande */}
-      <div className="flex flex-col items-center py-8 bg-[#111b21]">
+      <div className="flex flex-col items-center py-8" style={{ backgroundColor: colors.bg }}>
         <div 
-          className="w-32 h-32 rounded-full bg-[#00a884] flex items-center justify-center mb-4 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+          className="w-32 h-32 rounded-full bg-emerald-600 flex items-center justify-center mb-4 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => conversation.profile_picture_url && setIsPhotoExpanded(true)}
         >
           {conversation.profile_picture_url ? (
@@ -80,22 +83,22 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className="text-white text-4xl font-semibold">
+            <span className="text-white text-4xl font-semibold" style={{ color: colors.text }}>
               {displayName?.charAt(0)?.toUpperCase() || '?'}
             </span>
           )}
         </div>
-        <h3 className="text-white text-xl font-semibold mb-1">{displayName}</h3>
-        <p className="text-gray-400 text-sm">{conversation.phone}</p>
+        <h3 className="text-xl font-semibold mb-1" style={{ color: colors.text }}>{displayName}</h3>
+        <p className="text-sm" style={{ color: colors.textSecondary }}>{conversation.phone}</p>
       </div>
 
       {/* Informações */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-4">
           {/* Nome Personalizado */}
-          <div className="bg-[#202c33] rounded-lg p-4">
+          <div className="rounded-lg p-4" style={{ backgroundColor: colors.bgSecondary }}>
             <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center text-gray-400">
+              <div className="flex items-center" style={{ color: colors.textSecondary }}>
                 <User size={18} className="mr-2" />
                 <span className="text-sm">Nome Personalizado</span>
               </div>
@@ -116,13 +119,14 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="Digite o nome personalizado"
-                  className="flex-1 bg-[#2a3942] text-white text-sm px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-[#00a884]"
+                  className="flex-1 text-sm px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  style={{ backgroundColor: colors.bgTertiary, color: colors.text }}
                   autoFocus
                 />
                 <button
                   onClick={handleSaveCustomName}
                   disabled={isSaving || !customName.trim()}
-                  className="bg-[#00a884] text-white px-3 py-2 rounded text-sm hover:bg-[#008f6f] transition-colors disabled:opacity-50"
+                  className="bg-emerald-600 text-white px-3 py-2 rounded text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50"
                 >
                   {isSaving ? '...' : 'Salvar'}
                 </button>
@@ -131,7 +135,8 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
                     setIsEditing(false);
                     setCustomName(conversation?.custom_name || '');
                   }}
-                  className="bg-gray-600 text-white px-3 py-2 rounded text-sm hover:bg-gray-500 transition-colors"
+                  className="px-3 py-2 rounded text-sm transition-colors"
+                  style={{ backgroundColor: colors.bgTertiary, color: colors.textSecondary }}
                 >
                   Cancelar
                 </button>
@@ -139,7 +144,8 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
             ) : (
               <button
                 onClick={() => setIsEditing(true)}
-                className="w-full text-left text-white text-sm py-2 px-3 bg-[#2a3942] rounded hover:bg-[#374248] transition-colors"
+                className="w-full text-left text-sm py-2 px-3 rounded transition-colors"
+                style={{ backgroundColor: colors.bgTertiary, color: colors.text }}
               >
                 {customName || 'Adicionar nome personalizado'}
               </button>
@@ -147,32 +153,32 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
           </div>
 
           {/* Telefone */}
-          <div className="bg-[#202c33] rounded-lg p-4">
-            <div className="flex items-center text-gray-400 mb-2">
+          <div className="rounded-lg p-4" style={{ backgroundColor: colors.bgSecondary }}>
+            <div className="flex items-center mb-2" style={{ color: colors.textSecondary }}>
               <Phone size={18} className="mr-2" />
               <span className="text-sm">Telefone</span>
             </div>
-            <p className="text-white text-sm">{conversation.phone}</p>
+            <p className="text-sm" style={{ color: colors.text }}>{conversation.phone}</p>
           </div>
 
           {/* Nome do Contato (WhatsApp) */}
           {conversation.contact_name && (
-            <div className="bg-[#202c33] rounded-lg p-4">
-              <div className="flex items-center text-gray-400 mb-2">
+            <div className="rounded-lg p-4" style={{ backgroundColor: colors.bgSecondary }}>
+              <div className="flex items-center mb-2" style={{ color: colors.textSecondary }}>
                 <User size={18} className="mr-2" />
                 <span className="text-sm">Nome no WhatsApp</span>
               </div>
-              <p className="text-white text-sm">{conversation.contact_name}</p>
+              <p className="text-sm" style={{ color: colors.text }}>{conversation.contact_name}</p>
             </div>
           )}
 
           {/* Data de Criação */}
-          <div className="bg-[#202c33] rounded-lg p-4">
-            <div className="flex items-center text-gray-400 mb-2">
+          <div className="rounded-lg p-4" style={{ backgroundColor: colors.bgSecondary }}>
+            <div className="flex items-center mb-2" style={{ color: colors.textSecondary }}>
               <Calendar size={18} className="mr-2" />
               <span className="text-sm">Conversa criada em</span>
             </div>
-            <p className="text-white text-sm">
+            <p className="text-sm" style={{ color: colors.text }}>
               {new Date(conversation.created_at).toLocaleDateString('pt-BR', {
                 day: '2-digit',
                 month: '2-digit',
@@ -185,12 +191,12 @@ export default function ContactPanel({ conversation, onClose, onUpdate }) {
 
           {/* Última Mensagem */}
           {conversation.last_message_at && (
-            <div className="bg-[#202c33] rounded-lg p-4">
-              <div className="flex items-center text-gray-400 mb-2">
+            <div className="rounded-lg p-4" style={{ backgroundColor: colors.bgSecondary }}>
+              <div className="flex items-center mb-2" style={{ color: colors.textSecondary }}>
                 <Clock size={18} className="mr-2" />
                 <span className="text-sm">Última atividade</span>
               </div>
-              <p className="text-white text-sm">
+              <p className="text-sm" style={{ color: colors.text }}>
                 {new Date(conversation.last_message_at).toLocaleDateString('pt-BR', {
                   day: '2-digit',
                   month: '2-digit',
