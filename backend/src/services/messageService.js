@@ -720,6 +720,19 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       };
     }
 
+    // Extrair contextInfo (ID da mensagem citada, se for uma resposta)
+    const contextInfo = msg.extendedTextMessage?.contextInfo ||
+                        msg.imageMessage?.contextInfo ||
+                        msg.audioMessage?.contextInfo ||
+                        msg.videoMessage?.contextInfo ||
+                        msg.documentMessage?.contextInfo ||
+                        msg.stickerMessage?.contextInfo;
+    const quotedMessageWid = contextInfo?.stanzaId || null;
+
+    if (quotedMessageWid) {
+      metadata = { ...metadata, quoted_message_wid: quotedMessageWid };
+    }
+
     // Salva a mensagem
     const unique_id = `${key.remoteJid}-${fromMe ? '1' : '0'}-${key.id}`;
     const messageData = {
@@ -1219,12 +1232,13 @@ export async function sendWhatsAppMessage(sock, conversationId, content, message
         }
 
         // Construir quoted message manualmente com formato correto do Baileys
+        // IMPORTANTE: participant NÃO deve ser definido para mensagens diretas (DM)
+        // Só é necessário em grupos para identificar quem enviou
         messageOptions.quoted = {
           key: {
             remoteJid: phoneJid,
-            fromMe: quoted.from_me || quoted.key?.fromMe || false,
-            id: msgId,
-            participant: phoneJid // Para DM, participant = remoteJid
+            fromMe: quoted.from_me !== undefined ? quoted.from_me : (quoted.key?.fromMe ?? false),
+            id: msgId
           },
           message: {
             conversation: quotedContent

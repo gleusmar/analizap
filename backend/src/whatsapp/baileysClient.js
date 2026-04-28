@@ -380,9 +380,31 @@ export async function createWhatsAppSocket(sessionIdParam = 'default', syncPerio
       syncFullHistory: syncPeriodDays > 0, // Desabilita syncFullHistory se syncPeriodDays for 0
       generateHighQualityLinkPreview: true,
       getMessage: async (key) => {
-        // Implementar busca de mensagem no banco de dados
-        // Por enquanto retorna null
-        return null;
+        try {
+          const { data } = await supabase
+            .from('messages')
+            .select('content, message_type, metadata')
+            .eq('real_message_id', key.id)
+            .maybeSingle();
+
+          if (!data) return undefined;
+
+          // Reconstruir objeto de mensagem no formato esperado pelo Baileys
+          switch (data.message_type) {
+            case 'image':
+              return { imageMessage: { caption: data.metadata?.caption || '', url: data.content } };
+            case 'audio':
+              return { audioMessage: { url: data.content } };
+            case 'video':
+              return { videoMessage: { caption: data.metadata?.caption || '', url: data.content } };
+            case 'document':
+              return { documentMessage: { fileName: data.metadata?.filename || '', url: data.content } };
+            default:
+              return { conversation: data.content || '' };
+          }
+        } catch (error) {
+          return undefined;
+        }
       }
     });
 
