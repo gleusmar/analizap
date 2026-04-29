@@ -14,7 +14,9 @@ import {
   sendLocation,
   sendReaction,
   forwardMessage,
-  deleteConversation
+  deleteConversation,
+  searchConversations,
+  clearConversationMessages
 } from '../controllers/conversationController.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -86,5 +88,11 @@ router.post('/conversations/:conversationId/forward', forwardMessage);
 
 // Enviar localização
 router.post('/conversations/:conversationId/location', sendLocation);
+
+// Busca de histórico
+router.get('/search', searchConversations);
+
+// Limpar mensagens de uma conversa (admin)
+router.delete('/conversations/:conversationId/messages', clearConversationMessages);
 
 export default router;

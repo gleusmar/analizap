@@ -16,6 +16,7 @@ import {
   getPrimaryIdentifier,
   extractPhoneFromJid,
   getJidFromLid,
+  saveMessage,
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { processMessageMedia } from '../services/mediaService.js';
@@ -736,7 +737,7 @@ function setupEvents(socket) {
 
   // Evento de atualização de mensagens
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    logger.info('messages.upsert recebido:', { type, count: messages.length, messages });
+    if (type === 'notify') logger.debug('messages.upsert:', { type, count: messages.length });
 
     for (const message of messages) {
       const remoteJid = message.key?.remoteJid;
@@ -954,6 +955,70 @@ function setupEvents(socket) {
     // Processar atualizações de contato
     for (const contact of contacts) {
       await handleContactUpdate(contact);
+    }
+  });
+
+  // B10: Detectar chamadas recebidas, responder automaticamente e registrar na conversa
+  socket.ev.on('call', async (calls) => {
+    for (const call of calls) {
+      if (call.status !== 'offer') continue; // apenas ofertas (incoming)
+      if (call.isGroup) continue;
+
+      const remoteJid = call.from;
+      if (!remoteJid || isGroupOrBroadcast(remoteJid)) continue;
+
+      try {
+        // Rejeitar a chamada automaticamente
+        await socket.rejectCall(call.id, remoteJid).catch(() => {});
+
+        // Buscar / criar conversa
+        const conversation = await getOrCreateConversation(remoteJid, null, null, null, socket);
+        if (!conversation) continue;
+
+        const AUTO_REPLY_MSG = 'As chamadas de voz e vídeo estão desabilitadas para esse WhatsApp, favor enviar uma mensagem de texto.';
+        const callType = call.isVideo ? 'video' : 'audio';
+
+        // Salvar evento de chamada na conversa (tipo 'call')
+        const callRecord = await saveMessage({
+          conversation_id: conversation.id,
+          message_id: `call_${call.id || Date.now()}`,
+          from_me: false,
+          message_type: 'call',
+          content: `Chamada de ${callType} recebida`,
+          metadata: { callType, status: 'missed', callId: call.id },
+          timestamp: new Date().toISOString()
+        });
+
+        // Emitir evento de chamada para o frontend
+        if (io) {
+          io.emit('whatsapp:message', { conversation_id: conversation.id, message: callRecord });
+        }
+
+        // Enviar mensagem automática após 3 segundos
+        setTimeout(async () => {
+          try {
+            await socket.sendMessage(remoteJid, { text: AUTO_REPLY_MSG });
+
+            const autoReply = await saveMessage({
+              conversation_id: conversation.id,
+              message_id: `autoreply_${Date.now()}`,
+              from_me: true,
+              message_type: 'text',
+              content: AUTO_REPLY_MSG,
+              metadata: {},
+              timestamp: new Date().toISOString()
+            });
+
+            if (io) {
+              io.emit('whatsapp:message', { conversation_id: conversation.id, message: autoReply });
+            }
+          } catch (err) {
+            logger.error('Erro ao enviar auto-reply de chamada:', err);
+          }
+        }, 3000);
+      } catch (err) {
+        logger.error('Erro ao processar chamada recebida:', err);
+      }
     }
   });
 }

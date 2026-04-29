@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Chat from './pages/Chat';
+import SearchPage from './pages/SearchPage';
+import ContactsPage from './pages/ContactsPage';
 import Settings from './pages/Settings';
 import SettingsUsers from './pages/SettingsUsers';
 import SettingsDepartments from './pages/SettingsDepartments';
@@ -41,6 +43,22 @@ function App() {
               <Route path="predefined-messages" element={<SettingsPredefinedMessages />} />
               <Route path="connection" element={<AdminRoute><SettingsConnection /></AdminRoute>} />
             </Route>
+            <Route
+              path="/search"
+              element={
+                <ProtectedRoute>
+                  <SearchPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contacts"
+              element={
+                <ProtectedRoute>
+                  <ContactsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/" element={<Navigate to="/login" replace />} />
           </Routes>
         </Router>

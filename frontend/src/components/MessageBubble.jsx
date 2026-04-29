@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle } from 'lucide-react';
+import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle, Phone, VideoOff } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export function MessageBubble({ message, isMe, onReact, onForward, onReply, onScrollToMessage }) {
@@ -309,6 +309,20 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
                 ))}
               </div>
             )}
+          </div>
+        );
+
+      case 'call':
+        return (
+          <div className="flex items-center gap-2 py-1">
+            {metadata?.callType === 'video' ? (
+              <VideoOff size={16} style={{ color: isMe ? colors.meMessageText : colors.textSecondary }} />
+            ) : (
+              <Phone size={16} style={{ color: isMe ? colors.meMessageText : colors.textSecondary }} />
+            )}
+            <span className="text-sm italic" style={{ color: isMe ? colors.meMessageText : colors.textSecondary }}>
+              {content || 'Chamada perdida'}
+            </span>
           </div>
         );
 

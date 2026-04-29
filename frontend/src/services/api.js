@@ -159,6 +159,8 @@ export const conversationsAPI = {
   forwardMessage: (conversationId, messageIds, targetConversationIds) =>
     api.post(`/conversations/${conversationId}/forward`, { messageIds, targetConversationIds }),
   delete: (conversationId) => api.delete(`/conversations/${conversationId}`),
+  clearMessages: (conversationId) => api.delete(`/conversations/${conversationId}/messages`),
+  search: (q, dateFrom, dateTo) => api.get('/search', { params: { q, dateFrom, dateTo } }),
 };
 
 export default api;

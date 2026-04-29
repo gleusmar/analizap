@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { X, CheckSquare, Square, Loader2, ArrowUpDown, Sun, Moon } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { authAPI, tagsAPI, conversationsAPI, predefinedMessagesAPI } from '../services/api';
@@ -21,8 +21,10 @@ function Chat() {
 
   const [sidebarWidth, setSidebarWidth] = useState(350);
   const [isResizing, setIsResizing] = useState(false);
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('open');
   const [searchQuery, setSearchQuery] = useState('');
+  const [closedPage, setClosedPage] = useState(1);
+  const location = useLocation();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [conversationSearchQuery, setConversationSearchQuery] = useState('');
@@ -90,10 +92,11 @@ function Chat() {
     } catch { /* sem AudioContext */ }
   }, []);
 
-  // Notificação nativa do browser
+  // Notificação nativa do browser (B8: trunca body para evitar URL no subtítulo)
   const showBrowserNotification = useCallback((title, body) => {
     if (!('Notification' in window)) return;
-    const show = () => new Notification(title, { body, icon: '/ico.png', tag: 'wa-msg' });
+    const truncated = body.length > 100 ? body.slice(0, 97) + '...' : body;
+    const show = () => new Notification(title, { body: truncated, icon: '/ico.png', tag: 'wa-msg', silent: false });
     if (Notification.permission === 'granted') show();
     else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') show(); });
   }, []);
@@ -242,13 +245,16 @@ function Chat() {
     setSocketMessages({});
   }, [selectedConversation?.id]);
 
-  // Desativar loading quando mensagens carregarem
-  // Usa apenas loadingMessages como dep para evitar race condition com selectedConversation
+  // B3: Desativar loading quando mensagens carregarem para a conversa correta
+  const loadingForIdRef = useRef(null);
   useEffect(() => {
-    if (!loadingMessages) {
+    if (selectedConversation?.id) loadingForIdRef.current = selectedConversation.id;
+  }, [selectedConversation?.id]);
+  useEffect(() => {
+    if (!loadingMessages && loadingForIdRef.current === selectedConversation?.id) {
       setLoadingConversation(false);
     }
-  }, [loadingMessages]);
+  }, [loadingMessages, selectedConversation?.id]);
 
   const { connectionStatus, socket, emitReadConversation, emitPresence } = useWhatsApp(handleMessageReceived, handleMessageStatusUpdate, handleMessageUpdated);
   const { getPresence } = usePresence(socket);
@@ -320,12 +326,15 @@ function Chat() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMore, loadingMessages, loadMore]);
 
-  // Scrollar para o final quando a conversa é selecionada
+  // B4: Scroll para o final na PRIMEIRA carga de mensagens de uma conversa
+  const firstLoadDoneRef = useRef(false);
+  useEffect(() => { firstLoadDoneRef.current = false; }, [selectedConversation?.id]);
   useEffect(() => {
-    if (selectedConversation) {
-      setTimeout(scrollToBottom, 100);
+    if (!loadingMessages && messages.length > 0 && !firstLoadDoneRef.current) {
+      firstLoadDoneRef.current = true;
+      scrollToBottom();
     }
-  }, [selectedConversation, scrollToBottom]);
+  }, [loadingMessages, messages.length, scrollToBottom]);
 
   // Scrollar para o final quando mensagens do backend mudam (se estiver no final)
   useEffect(() => {
@@ -658,6 +667,9 @@ function Chat() {
     return conversationsWithTags.filter(c => c.status === 'pending').length;
   }, [conversationsWithTags]);
 
+  // B5: reset closedPage ao mudar de aba
+  useEffect(() => { if (activeTab !== 'closed') setClosedPage(1); }, [activeTab]);
+
   // Filtrar conversas por aba e busca
   const filteredConversations = useMemo(() => {
     const conversationsToFilter = conversationsWithTags;
@@ -667,8 +679,8 @@ function Chat() {
         if (activeTab === 'pending') {
           if (conv.status !== 'pending') return false;
         } else if (activeTab === 'open') {
-          // Abertas = todas que não estão fechadas
-          if (!conv.is_open) return false;
+          // Abertas = apenas status 'open' (não pending, não closed)
+          if (conv.status !== 'open') return false;
         } else if (activeTab === 'mine') {
           // Minhas = abertas onde o usuário atual é participante
           if (!conv.is_open) return false;
@@ -703,8 +715,23 @@ function Chat() {
         return sortOrder === 'desc'
           ? bDate - aDate // Mais recente primeiro
           : aDate - bDate; // Mais antiga primeiro
-      });
-  }, [conversationsWithTags, activeTab, searchQuery, sortOrder]);
+      })
+      // B5: Fechadas com lazy loading - limitar a closedPage * 20
+      .slice(0, activeTab === 'closed' ? closedPage * 20 : undefined);
+  }, [conversationsWithTags, activeTab, searchQuery, sortOrder, closedPage]);
+
+  // B9/B11: Abrir conversa específica ao voltar das páginas Search / Contacts
+  useEffect(() => {
+    const targetId = location.state?.openConversationId;
+    if (!targetId || conversationsWithTags.length === 0) return;
+    const conv = conversationsWithTags.find(c => c.id === targetId);
+    if (conv) {
+      handleSelectConversation(conv);
+      // Limpar o state para não redirecionar de novo
+      navigate('/dashboard', { replace: true, state: {} });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.openConversationId, conversationsWithTags.length]);
 
   // Combinar mensagens otimistas, socketMessages e mensagens do backend
   const allMessages = useMemo(() => {
@@ -1224,6 +1251,28 @@ function Chat() {
 
         <div className="flex-1"></div>
 
+        {/* Contatos */}
+        <button
+          onClick={() => navigate('/contacts')}
+          className="mb-3 p-2 text-gray-400 hover:text-emerald-500 transition-colors"
+          title="Contatos"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+
+        {/* Busca de histórico */}
+        <button
+          onClick={() => navigate('/search')}
+          className="mb-3 p-2 text-gray-400 hover:text-emerald-500 transition-colors"
+          title="Busca no histórico"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </button>
+
         {/* Toggle de tema */}
         <button
           onClick={toggleTheme}
@@ -1309,9 +1358,9 @@ function Chat() {
           </div>
           <div className="flex space-x-1 mb-3">
             {[
-              { key: 'pending', label: 'Pendentes', badge: pendingCount },
               { key: 'open',    label: 'Abertas',   badge: 0 },
               { key: 'mine',    label: 'Minhas',    badge: 0 },
+              { key: 'pending', label: 'Pendentes', badge: pendingCount },
               { key: 'closed',  label: 'Fechadas',  badge: 0 },
             ].map(({ key, label, badge }) => (
               <button
@@ -1365,7 +1414,16 @@ function Chat() {
         )}
 
         {/* Lista de conversas */}
-        <div className="flex-1 overflow-y-auto">
+        <div
+          className="flex-1 overflow-y-auto"
+          onScroll={e => {
+            if (activeTab !== 'closed') return;
+            const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+            if (scrollHeight - scrollTop - clientHeight < 80) {
+              setClosedPage(p => p + 1);
+            }
+          }}
+        >
           {filteredConversations.length === 0 ? (
             <div className="text-center py-8 text-sm" style={{ color: colors.textSecondary }}>
               {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa nesta aba'}
@@ -1418,7 +1476,10 @@ function Chat() {
                             <span
                               key={idx}
                               className="text-xs px-1.5 py-0.5 rounded mr-1"
-                              style={{ backgroundColor: tag.color + '40', color: tag.color }}
+                              style={isDark
+                                ? { backgroundColor: tag.color + '33', color: tag.color }
+                                : { backgroundColor: tag.color + 'CC', color: '#fff' }
+                              }
                             >
                               {tag.name}
                             </span>
@@ -1482,7 +1543,10 @@ function Chat() {
                           <span
                             key={idx}
                             className="text-xs px-1.5 py-0.5 rounded mr-1 flex items-center"
-                            style={{ backgroundColor: tag.color + '40', color: tag.color }}
+                            style={isDark
+                              ? { backgroundColor: tag.color + '33', color: tag.color }
+                              : { backgroundColor: tag.color + 'CC', color: '#fff' }
+                            }
                           >
                             {tag.name}
                             <button
@@ -1656,8 +1720,21 @@ function Chat() {
               </div>
             )}
 
+            {/* Banner: conversa pendente */}
+            {selectedConversation?.is_open && selectedConversation?.status === 'pending' && (
+              <div className="p-4 flex-shrink-0 flex items-center justify-center gap-3 border-t" style={{ backgroundColor: colors.bgSecondary, borderColor: colors.border }}>
+                <span className="text-sm" style={{ color: colors.textSecondary }}>Aguardando atendimento</span>
+                <button
+                  onClick={handleOpenConversation}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  Assumir conversa
+                </button>
+              </div>
+            )}
+
             {/* Input de mensagem */}
-            {selectedConversation?.is_open && (
+            {selectedConversation?.is_open && selectedConversation?.status !== 'pending' && (
             <div className="p-3 flex-shrink-0 relative" style={{ backgroundColor: colors.bgSecondary }}>
               {/* Indicador de resposta */}
               {replyingTo && (

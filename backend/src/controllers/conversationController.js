@@ -766,3 +766,112 @@ export async function sendLocation(req, res) {
     res.status(500).json({ error: 'Erro ao enviar localização' });
   }
 }
+
+/**
+ * Busca conversas e mensagens por texto, telefone e intervalo de datas
+ */
+export async function searchConversations(req, res) {
+  try {
+    const { q, dateFrom, dateTo } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.status(400).json({ error: 'Busca deve ter ao menos 2 caracteres' });
+    }
+
+    const term = q.trim().toLowerCase();
+    const from = dateFrom ? new Date(dateFrom).toISOString() : null;
+    const to = dateTo ? new Date(dateTo).toISOString() : null;
+
+    // 1. Buscar conversas por nome ou telefone
+    const { data: convByName } = await supabase
+      .from('conversations')
+      .select('id, phone, contact_name, custom_name, profile_picture_url, status, is_open, last_message_at')
+      .or(`contact_name.ilike.%${term}%,custom_name.ilike.%${term}%,phone.ilike.%${term}%`);
+
+    // 2. Buscar mensagens que contenham o termo dentro do intervalo de datas
+    let msgQuery = supabase
+      .from('messages')
+      .select('id, conversation_id, content, message_type, timestamp, from_me, metadata')
+      .ilike('content', `%${term}%`);
+
+    if (from) msgQuery = msgQuery.gte('timestamp', from);
+    if (to) msgQuery = msgQuery.lte('timestamp', to);
+
+    const { data: matchedMessages } = await msgQuery.order('timestamp', { ascending: false }).limit(200);
+
+    // 3. Coletar IDs de conversas únicas das mensagens encontradas
+    const convIdsFromMessages = [...new Set((matchedMessages || []).map(m => m.conversation_id))];
+
+    // 4. Buscar conversas dessas mensagens (se não vieram da busca por nome)
+    let convFromMessages = [];
+    if (convIdsFromMessages.length > 0) {
+      const { data } = await supabase
+        .from('conversations')
+        .select('id, phone, contact_name, custom_name, profile_picture_url, status, is_open, last_message_at')
+        .in('id', convIdsFromMessages);
+      convFromMessages = data || [];
+    }
+
+    // 5. Mesclar e deduplicar conversas
+    const allConvs = [...(convByName || []), ...convFromMessages];
+    const convMap = {};
+    allConvs.forEach(c => { convMap[c.id] = c; });
+    const conversations = Object.values(convMap);
+
+    // 6. Para cada conversa, anexar as mensagens correspondentes que batem
+    const messagesByConv = {};
+    (matchedMessages || []).forEach(m => {
+      if (!messagesByConv[m.conversation_id]) messagesByConv[m.conversation_id] = [];
+      messagesByConv[m.conversation_id].push(m);
+    });
+
+    const results = conversations.map(conv => ({
+      ...conv,
+      contact_name: conv.custom_name || conv.contact_name,
+      matched_messages: (messagesByConv[conv.id] || []).slice(0, 3)
+    }));
+
+    // Ordenar: conversas com mensagens primeiro, depois por data
+    results.sort((a, b) => {
+      const aHasMsgs = a.matched_messages.length > 0 ? 1 : 0;
+      const bHasMsgs = b.matched_messages.length > 0 ? 1 : 0;
+      if (aHasMsgs !== bHasMsgs) return bHasMsgs - aHasMsgs;
+      return new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0);
+    });
+
+    res.json({ success: true, results, total: results.length });
+  } catch (error) {
+    logger.error('Erro na busca:', error);
+    res.status(500).json({ error: 'Erro ao buscar conversas' });
+  }
+}
+
+/**
+ * Limpa todas as mensagens de uma conversa (apenas admin)
+ */
+export async function clearConversationMessages(req, res) {
+  try {
+    const { conversationId } = req.params;
+
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Apenas admin pode limpar mensagens' });
+    }
+
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('conversation_id', conversationId);
+
+    if (error) throw error;
+
+    await supabase
+      .from('conversations')
+      .update({ unread_count: 0, last_message_at: null })
+      .eq('id', conversationId);
+
+    res.json({ success: true, message: 'Mensagens removidas' });
+  } catch (error) {
+    logger.error('Erro ao limpar mensagens:', error);
+    res.status(500).json({ error: 'Erro ao limpar mensagens' });
+  }
+}
