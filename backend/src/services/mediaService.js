@@ -1,9 +1,5 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import fs from 'fs';
-import { unlink } from 'fs/promises';
-import path from 'path';
 import { uploadFileToSupabase } from './messageService.js';
-import { logger } from '../utils/logger.js';
 
 /**
  * Faz download de mídia do WhatsApp
@@ -19,23 +15,6 @@ export async function downloadMediaFromWhatsApp(message) {
     }
     throw error;
   }
-}
-
-/**
- * Salva buffer temporariamente em disco
- */
-export async function saveTempFile(buffer, fileName) {
-  const tempDir = path.join(process.cwd(), 'temp');
-  
-  // Cria diretório temp se não existir
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
-  const filePath = path.join(tempDir, fileName);
-  fs.writeFileSync(filePath, buffer);
-
-  return filePath;
 }
 
 /**
@@ -103,11 +82,7 @@ export async function processMessageMedia(message, messageType, messageId) {
     }
 
     const fileName = `${messageId}.${extension}`;
-    const tempFilePath = await saveTempFile(buffer, fileName);
-
-    const publicUrl = await uploadFileToSupabase(tempFilePath, fileName, mimeType);
-
-    await unlink(tempFilePath);
+    const publicUrl = await uploadFileToSupabase(buffer, fileName, mimeType);
     return publicUrl;
   } catch (error) {
     throw error;

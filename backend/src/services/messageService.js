@@ -125,7 +125,8 @@ export const MESSAGE_TYPES = {
   CONTACT: 'contact',
   STICKER: 'sticker',
   POLL: 'poll',
-  INTERACTIVE_RESPONSE: 'interactive_response'
+  INTERACTIVE_RESPONSE: 'interactive_response',
+  SYSTEM: 'system'
 };
 
 /**
@@ -1088,7 +1089,7 @@ export async function addUserToConversation(conversationId, userId) {
 /**
  * Fecha uma conversa
  */
-export async function closeConversation(conversationId) {
+export async function closeConversation(conversationId, closedByName = null) {
   try {
     const { error } = await supabase
       .from('conversations')
@@ -1099,6 +1100,22 @@ export async function closeConversation(conversationId) {
       logger.error('Erro ao fechar conversa:', error);
       throw error;
     }
+
+    // C6: salvar mensagem de sistema registrando encerramento
+    const closedAt = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' });
+    const systemContent = closedByName
+      ? `Conversa encerrada por ${closedByName} em ${closedAt}`
+      : `Conversa encerrada em ${closedAt}`;
+
+    await saveMessage({
+      conversation_id: conversationId,
+      message_id: `sys_close_${Date.now()}`,
+      from_me: true,
+      message_type: 'system',
+      content: systemContent,
+      metadata: { type: 'close_notification' },
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     logger.error('Erro ao fechar conversa:', error);

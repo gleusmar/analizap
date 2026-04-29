@@ -10,6 +10,17 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
   const { colors } = useTheme();
   const { message_type, content, metadata, timestamp, is_delivered, is_read, delivery_error } = message;
 
+  // C6: mensagem de sistema — exibir como info centralizada, sem bolha
+  if (message_type === 'system') {
+    return (
+      <div className="flex justify-center my-2 px-4">
+        <span className="text-xs px-3 py-1 rounded-full" style={{ backgroundColor: colors.bgTertiary, color: colors.textSecondary }}>
+          {content}
+        </span>
+      </div>
+    );
+  }
+
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

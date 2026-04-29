@@ -61,6 +61,9 @@ function Chat() {
   const [loadingConversation, setLoadingConversation] = useState(false);
   // Estado para ordenação
   const [sortOrder, setSortOrder] = useState('desc'); // 'asc' ou 'desc'
+  // C13: overrides de status de leitura para atualização em tempo real
+  const [messageStatusOverrides, setMessageStatusOverrides] = useState({});
+  const textareaRef = useRef(null);
 
   // Hooks para dados reais
   const { conversations, loading: loadingConversations, refresh: refreshConversations } = useConversations();
@@ -156,7 +159,8 @@ function Chat() {
       playNotificationSound();
       const conv = conversationsWithTagsRef.current.find(c => c.id === conversationId) || {};
       const sender = conv.contact_name || conv.phone || 'Nova mensagem';
-      const body = message.message_type === 'text' ? (message.content || '') : `[${message.message_type}]`;
+      const rawBody = message.message_type === 'text' ? (message.content || '') : `[${message.message_type}]`;
+      const body = rawBody.replace(/https?:\/\/\S+/gi, '').trim().slice(0, 80) || rawBody.slice(0, 80);
       showBrowserNotification(sender, body);
     }
 
@@ -169,6 +173,9 @@ function Chat() {
   const handleMessageStatusUpdate = useCallback((messageId, status) => {
     const isDelivered = status === 'delivered' || status === 'read';
     const isRead = status === 'read';
+
+    // C13: atualizar override de status para atualizar vv em tempo real
+    setMessageStatusOverrides(prev => ({ ...prev, [messageId]: { is_delivered: isDelivered, is_read: isRead } }));
 
     const applyStatus = msgs => msgs.map(m =>
       m.message_id === messageId ? { ...m, is_delivered: isDelivered, is_read: isRead } : m
@@ -230,9 +237,21 @@ function Chat() {
       return;
     }
 
-    // Se não tiver temp_message_id (atualização de mídia processada), recarrega
+    // Se não tiver temp_message_id (atualização de mídia processada)
+    if (messageId && content) {
+      // Atualizar conteúdo in-place em socketMessages e messageStatusOverrides
+      const applyContent = msgs => msgs.map(m =>
+        m.message_id === messageId ? { ...m, content } : m
+      );
+      setSocketMessages(prev => {
+        const updated = {};
+        for (const [id, msgs] of Object.entries(prev)) updated[id] = applyContent(msgs);
+        return updated;
+      });
+    }
+
+    // Se for a conversa aberta, recarregar para garantir dados do backend
     if (conversationId === selectedConversation?.id) {
-      // Invalidar cache e recarregar para mostrar a mensagem atualizada
       const cacheKey = `messages_${conversationId}`;
       localStorage.removeItem(cacheKey);
       localStorage.removeItem(`${cacheKey}_time`);
@@ -574,6 +593,8 @@ function Chat() {
     setConversationsWithTags(updatedConversations);
     const updatedSelected = updatedConversations.find(c => c.id === id);
     if (updatedSelected) setSelectedConversation(updatedSelected);
+    // C10: focar na aba Abertas ao reabrir
+    setActiveTab('open');
 
     try {
       await conversationsAPI.reopen(id);
@@ -720,14 +741,27 @@ function Chat() {
       .slice(0, activeTab === 'closed' ? closedPage * 20 : undefined);
   }, [conversationsWithTags, activeTab, searchQuery, sortOrder, closedPage]);
 
-  // B9/B11: Abrir conversa específica ao voltar das páginas Search / Contacts
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+
+  // B9/B11/C7: Abrir conversa específica ao voltar das páginas Search / Contacts
   useEffect(() => {
     const targetId = location.state?.openConversationId;
+    const scrollToId = location.state?.scrollToMessageId;
     if (!targetId || conversationsWithTags.length === 0) return;
     const conv = conversationsWithTags.find(c => c.id === targetId);
     if (conv) {
       handleSelectConversation(conv);
-      // Limpar o state para não redirecionar de novo
+      if (scrollToId) {
+        // Aguardar mensagens carregar, depois scrollar e destacar
+        setTimeout(() => {
+          const el = document.getElementById(`msg-${scrollToId}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlightedMessageId(scrollToId);
+            setTimeout(() => setHighlightedMessageId(null), 3000);
+          }
+        }, 800);
+      }
       navigate('/dashboard', { replace: true, state: {} });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -747,10 +781,16 @@ function Chat() {
     const optimisticMessageIds = new Set(uniqueOptimistic.map(m => m.message_id));
     const uniqueSocketFinal = uniqueSocketMessages.filter(m => !optimisticMessageIds.has(m.message_id));
 
-    const combined = [...messages, ...uniqueSocketFinal, ...uniqueOptimistic];
+    // C13: aplicar overrides de status sobre mensagens do backend
+    const backendWithStatus = messages.map(m => {
+      const override = messageStatusOverrides[m.message_id];
+      return override ? { ...m, ...override } : m;
+    });
+
+    const combined = [...backendWithStatus, ...uniqueSocketFinal, ...uniqueOptimistic];
     // Ordenar por timestamp (mais antigas primeiro)
     return combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-  }, [messages, optimisticMessages, socketMessages, selectedConversation?.id]);
+  }, [messages, optimisticMessages, socketMessages, selectedConversation?.id, messageStatusOverrides]);
 
   // Filtrar e ordenar contatos para encaminhamento
   const filteredConversationsForForward = useMemo(() => {
@@ -1003,6 +1043,14 @@ function Chat() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // C1: Resetar altura do textarea quando messageInput for limpo
+  useEffect(() => {
+    if (!messageInput && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.overflowY = 'hidden';
+    }
+  }, [messageInput]);
+
   // Lidar com mudança no input de mensagem (atalhos + presença)
   const handleMessageInputChange = (e) => {
     const value = e.target.value;
@@ -1191,6 +1239,10 @@ function Chat() {
           return '👤 Contato';
         case 'sticker':
           return '😊 Figurinha';
+        case 'call':
+          return '📞 Chamada';
+        case 'system':
+          return <span className="italic opacity-70">{message.content}</span>;
         case 'text':
         default:
           const textContent = message.content?.substring(0, 50) || 'Mensagem de texto';
@@ -1229,25 +1281,38 @@ function Chat() {
     <div className="h-screen flex bg-white" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
       {/* Coluna Esquerda Fixa (60px) */}
       <div className="w-[60px] flex flex-col items-center py-3 flex-shrink-0" style={{ backgroundColor: colors.bg4 }}>
-        {/* Status da conexão */}
-        <div className="mb-6">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-red-500'
-            }`}
-            title={connectionStatus === 'connected' ? 'Conectado' : 'Desconectado'}
-          >
-            {connectionStatus === 'connected' ? (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
+        {/* Status da conexão — oculto enquanto carrega */}
+        {connectionStatus !== null && (
+          <div className="mb-6">
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                connectionStatus === 'connected' ? 'bg-emerald-500'
+                : connectionStatus === 'connecting' ? 'bg-yellow-500'
+                : 'bg-red-500'
+              }`}
+              title={
+                connectionStatus === 'connected' ? 'Conectado'
+                : connectionStatus === 'connecting' ? 'Conectando...'
+                : 'Desconectado'
+              }
+            >
+              {connectionStatus === 'connected' ? (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : connectionStatus === 'connecting' ? (
+                <svg className="w-5 h-5 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex-1"></div>
 
@@ -1672,16 +1737,22 @@ function Chat() {
                         </div>
                       );
                     }
+                    const isHighlighted = highlightedMessageId && item.message.message_id === highlightedMessageId;
                     return (
-                      <MessageBubble
+                      <div
                         key={item.id}
-                        message={item.message}
-                        isMe={item.message.from_me}
-                        onReact={handleReact}
-                        onForward={handleForward}
-                        onReply={handleReply}
-                        onScrollToMessage={scrollToMessage}
-                      />
+                        id={`msg-${item.message.message_id}`}
+                        className={`transition-all duration-500 rounded-lg ${isHighlighted ? 'ring-2 ring-emerald-400 bg-emerald-500/10' : ''}`}
+                      >
+                        <MessageBubble
+                          message={item.message}
+                          isMe={item.message.from_me}
+                          onReact={handleReact}
+                          onForward={handleForward}
+                          onReply={handleReply}
+                          onScrollToMessage={scrollToMessage}
+                        />
+                      </div>
                     );
                   })}
 
@@ -1782,22 +1853,12 @@ function Chat() {
 
                   {/* Menu de Anexos */}
                   {showAttachmentMenu && (
-                    <div className="attachment-menu absolute bottom-full left-0 mb-2 rounded-lg shadow-lg py-2 z-10" style={{ backgroundColor: colors.bgTertiary }}>
-                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('image')}>
-                        📷 Imagem
-                      </div>
-                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('video')}>
-                        📹 Vídeo
-                      </div>
-                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('audio')}>
-                        🎤 Áudio
-                      </div>
-                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('document')}>
-                        📎 Documento
-                      </div>
-                      <div className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34]" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect('location')}>
-                        📍 Localização
-                      </div>
+                    <div className="attachment-menu absolute bottom-full left-0 mb-2 rounded-lg shadow-lg py-2 z-10" style={{ backgroundColor: colors.bgTertiary, minWidth: '160px' }}>
+                      {[['image','📷','Imagem'],['video','📹','Vídeo'],['audio','🎤','Áudio'],['document','📎','Documento'],['location','📍','Localização']].map(([type, icon, label]) => (
+                        <div key={type} className="px-3 py-2 cursor-pointer hover:bg-[#1f2c34] flex items-center gap-2 whitespace-nowrap" style={{ color: colors.textSecondary }} onClick={() => handleAttachmentSelect(type)}>
+                          <span>{icon}</span><span className="text-sm">{label}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1812,15 +1873,28 @@ function Chat() {
                   </svg>
                 </button>
 
-                <input
+                <textarea
                   id="message-input"
-                  type="text"
+                  ref={textareaRef}
+                  rows={1}
                   placeholder={isRecording ? `Gravando... ${formatRecordingTime(recordingTime)}` : "Digite uma mensagem"}
                   value={messageInput}
-                  onChange={handleMessageInputChange}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className={`flex-1 bg-transparent placeholder-gray-400 text-sm focus:outline-none ${isRecording ? 'text-red-400' : ''}`}
-                  style={{ color: isRecording ? undefined : colors.text }}
+                  onChange={e => {
+                    handleMessageInputChange(e);
+                    const el = e.target;
+                    el.style.height = 'auto';
+                    const maxH = 120; // ~5 linhas
+                    el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
+                    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  className={`flex-1 bg-transparent placeholder-gray-400 text-sm focus:outline-none resize-none leading-5 ${isRecording ? 'text-red-400' : ''}`}
+                  style={{ color: isRecording ? undefined : colors.text, overflowY: 'hidden', minHeight: '20px', maxHeight: '120px' }}
                   disabled={isRecording}
                 />
 

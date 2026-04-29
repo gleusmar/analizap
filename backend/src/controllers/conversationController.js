@@ -153,8 +153,34 @@ export async function closeConversationRoute(req, res) {
   try {
     const { conversationId } = req.params;
 
+    // C6: obter nome do usuário para registrar no encerramento
+    let closedByName = null;
+    if (req.user?.id) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('name')
+        .eq('id', req.user.id)
+        .maybeSingle();
+      closedByName = user?.name || null;
+    }
 
-    await closeConversation(conversationId);
+    await closeConversation(conversationId, closedByName);
+
+    // C6: emitir mensagem de sistema via socket para atualizar frontend em tempo real
+    const io = getIO();
+    if (io) {
+      const { data: sysMsg } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .eq('message_type', 'system')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (sysMsg) {
+        io.emit('whatsapp:message', { conversation_id: conversationId, message: sysMsg, is_temp: false });
+      }
+    }
 
     res.json({
       success: true,
@@ -639,7 +665,8 @@ export async function sendAttachment(req, res) {
       temp_message_id: tempMessageId
     });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao enviar anexo' });
+    logger.error('Erro ao enviar anexo:', { message: error.message, stack: error.stack, code: error.code });
+    res.status(500).json({ error: 'Erro ao enviar anexo', details: error.message });
   }
 }
 
@@ -788,16 +815,29 @@ export async function searchConversations(req, res) {
       .select('id, phone, contact_name, custom_name, profile_picture_url, status, is_open, last_message_at')
       .or(`contact_name.ilike.%${term}%,custom_name.ilike.%${term}%,phone.ilike.%${term}%`);
 
-    // 2. Buscar mensagens que contenham o termo dentro do intervalo de datas
-    let msgQuery = supabase
-      .from('messages')
-      .select('id, conversation_id, content, message_type, timestamp, from_me, metadata')
-      .ilike('content', `%${term}%`);
-
-    if (from) msgQuery = msgQuery.gte('timestamp', from);
-    if (to) msgQuery = msgQuery.lte('timestamp', to);
-
-    const { data: matchedMessages } = await msgQuery.order('timestamp', { ascending: false }).limit(200);
+    // 2. Buscar mensagens — tenta fuzzy RPC (pg_trgm), fallback para ilike
+    let matchedMessages = [];
+    try {
+      const rpcParams = { search_term: term };
+      if (from) rpcParams.date_from = from;
+      if (to) rpcParams.date_to = to;
+      const { data: fuzzyData, error: rpcErr } = await supabase.rpc('search_messages_fuzzy', rpcParams);
+      if (!rpcErr && fuzzyData) {
+        matchedMessages = fuzzyData;
+      } else {
+        throw rpcErr || new Error('RPC indisponível');
+      }
+    } catch (_) {
+      // Fallback: ilike simples
+      let msgQuery = supabase
+        .from('messages')
+        .select('id, conversation_id, content, message_type, timestamp, from_me, metadata')
+        .ilike('content', `%${term}%`);
+      if (from) msgQuery = msgQuery.gte('timestamp', from);
+      if (to) msgQuery = msgQuery.lte('timestamp', to);
+      const { data } = await msgQuery.order('timestamp', { ascending: false }).limit(200);
+      matchedMessages = data || [];
+    }
 
     // 3. Coletar IDs de conversas únicas das mensagens encontradas
     const convIdsFromMessages = [...new Set((matchedMessages || []).map(m => m.conversation_id))];

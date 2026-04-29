@@ -69,4 +69,24 @@ server.listen(PORT, () => {
   logger.success(`Servidor iniciado`, { port: PORT, env: process.env.NODE_ENV || 'development' }, null, 'SERVER_START');
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📝 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+
+  // C8: keep-alive ping no Railway para evitar sleep (plano free)
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    const keepAliveUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/health`;
+    setInterval(() => {
+      fetch(keepAliveUrl).catch(err => logger.warn('Keep-alive ping falhou:', err.message));
+    }, 25 * 60 * 1000); // a cada 25 minutos
+    logger.info(`Keep-alive ativado para ${keepAliveUrl}`);
+  }
+});
+
+// C8: log ao encerrar processo para diagnóstico de quedas
+['SIGTERM', 'SIGINT', 'uncaughtException', 'unhandledRejection'].forEach(event => {
+  process.on(event, (err) => {
+    if (err instanceof Error) {
+      logger.error(`Processo encerrando por ${event}:`, { message: err.message, stack: err.stack?.split('\n').slice(0, 5).join(' | ') });
+    } else {
+      logger.warn(`Processo encerrando por sinal: ${event}`);
+    }
+  });
 });

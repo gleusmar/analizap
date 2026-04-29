@@ -5,7 +5,7 @@ import { connectionAPI } from '../services/api';
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = null, onMessageUpdated = null) {
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState(null); // null = carregando
   const [qrCode, setQrCode] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState(null);
   const [socket, setSocket] = useState(null);
@@ -61,10 +61,12 @@ export function useWhatsApp(onMessageReceived = null, onMessageStatusUpdate = nu
     return () => { socketInstance.disconnect(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Carrega status inicial
+  // Carrega status inicial e pinga a cada 30s para detectar quedas
   useEffect(() => {
     loadStatus();
-  }, []);
+    const interval = setInterval(loadStatus, 30000);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStatus = useCallback(async () => {
     try {

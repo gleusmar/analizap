@@ -273,6 +273,13 @@ let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_DELAY = 3000; // 3 segundos
 
+// C5: dedup em memória para evitar processamento duplicado da mesma mensagem (LID+JID)
+const recentlyProcessedIds = new Set();
+function markProcessed(messageId) {
+  recentlyProcessedIds.add(messageId);
+  setTimeout(() => recentlyProcessedIds.delete(messageId), 60000);
+}
+
 // Sistema de batching para mensagens do histórico
 const messageBatch = [];
 const BATCH_SIZE = 10; // Salvar a cada 10 mensagens (reduzido ainda mais)
@@ -474,6 +481,11 @@ function setupEvents(socket) {
         reason = `Erro desconhecido (statusCode: ${statusCode})`;
       }
 
+      logger.warn(`Conexão WhatsApp encerrada. Razão: ${reason} | statusCode: ${statusCode} | shouldReconnect: ${shouldReconnect}`, {
+        error: lastDisconnect?.error?.message,
+        stack: lastDisconnect?.error?.stack?.split('\n').slice(0, 3).join(' | ')
+      });
+
       if (shouldReconnect) {
         if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
           logger.error(`Máximo de tentativas de reconexão atingido (${MAX_RECONNECT_ATTEMPTS})`);
@@ -485,6 +497,7 @@ function setupEvents(socket) {
         // Exponential backoff
         const delay = BASE_DELAY * Math.pow(2, reconnectAttempts);
         reconnectAttempts++;
+        logger.info(`Tentativa de reconexão ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} em ${delay}ms`);
 
         connectionStatus = 'connecting';
         emitConnectionStatus('connecting');
@@ -583,7 +596,7 @@ function setupEvents(socket) {
     if (conversationId) {
       const { data: tempMsg } = await supabase
         .from('messages')
-        .select('id, message_id, conversation_id')
+        .select('id, message_id, conversation_id, message_type, content')
         .eq('conversation_id', conversationId)
         .eq('from_me', true)
         .ilike('message_id', 'temp_%')
@@ -609,7 +622,8 @@ function setupEvents(socket) {
       // Não emitir evento para evitar flicking - o frontend já tem a mensagem temporária
 
       // Se tiver mídia, processa em background e atualiza depois
-      if (message.message) {
+      // Pular se o conteúdo já for uma URL do Supabase (sendAttachment já fez upload)
+      if (message.message && !tempMessage.content?.includes('.supabase.co')) {
         const { MESSAGE_TYPES } = await import('../services/messageService.js');
         const messageType = tempMessage.message_type;
 
@@ -628,7 +642,8 @@ function setupEvents(socket) {
                 .eq('message_id', messageId)
                 .single();
 
-              if (currentMessage?.content?.startsWith('http')) return;
+              // Apenas pular se já for uma URL do Supabase (não pular CDN do WhatsApp)
+              if (currentMessage?.content?.includes('.supabase.co')) return;
 
               const { error } = await supabase
                 .from('messages')
@@ -675,8 +690,14 @@ function setupEvents(socket) {
         .update({ from_me: true })
         .eq('message_id', messageId);
 
-      // Não emitir whatsapp:message para mensagens enviadas - o endpoint /send já emitiu a temporária
-      // e o message_id foi atualizado em background
+      // Emitir mensagem se não havia temp (ex: sendAttachment falhou mas WA enviou mesmo assim)
+      if (io && !tempMessage) {
+        io.emit('whatsapp:message', {
+          conversation_id: processedMessage.conversation_id,
+          message: processedMessage,
+          is_temp: false
+        });
+      }
 
       // Se tiver mídia, processa em background e atualiza depois
       if (message.message) {
@@ -696,10 +717,10 @@ function setupEvents(socket) {
                 .eq('message_id', processedMessage.message_id)
                 .single();
 
-              // Só atualizar se o conteúdo atual não for uma URL (começa com http)
-              const isAlreadyUrl = currentMessage?.content?.startsWith('http');
+              // Apenas pular se já for uma URL do Supabase (não pular CDN do WhatsApp)
+              const isAlreadySupabase = currentMessage?.content?.includes('.supabase.co');
 
-              if (isAlreadyUrl) {
+              if (isAlreadySupabase) {
               } else {
                 const { error } = await supabase
                   .from('messages')
@@ -1264,6 +1285,11 @@ async function handleIncomingMessage(message, shouldProcess = true) {
   try {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
+    // C5: dedup — ignorar se message_id já foi processado recentemente (evita duplicata LID+JID)
+    if (recentlyProcessedIds.has(key.id)) {
+      return;
+    }
+    markProcessed(key.id);
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
@@ -1327,7 +1353,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     }
 
     const phone = remoteJid.split('@')[0];
-    const messageId = key.id;
+    const messageId = key.id; // eslint-disable-line no-shadow
 
     // Determinar se é mensagem de mídia
     const isMedia = msg.imageMessage || msg.audioMessage || msg.videoMessage ||

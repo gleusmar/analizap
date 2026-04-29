@@ -64,11 +64,11 @@ export default function SearchPage() {
     }
   }, [query, selectedPreset, customFrom, customTo]);
 
-  const handleGoToConversation = async (conv) => {
-    if (!conv.is_open) {
+  const handleGoToConversation = async (conv, messageId = null, reopen = true) => {
+    if (!conv.is_open && reopen) {
       await conversationsAPI.reopen(conv.id).catch(() => {});
     }
-    navigate('/dashboard', { state: { openConversationId: conv.id } });
+    navigate('/dashboard', { state: { openConversationId: conv.id, scrollToMessageId: messageId, viewOnly: !reopen && !conv.is_open } });
   };
 
   const formatDate = (ts) => {
@@ -190,21 +190,33 @@ export default function SearchPage() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleGoToConversation(conv)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                      style={{ backgroundColor: conv.is_open ? '#10b981' : '#059669', color: '#fff' }}
-                    >
-                      <ExternalLink size={13} />
-                      {conv.is_open ? 'Ir para conversa' : 'Reabrir e ver'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {!conv.is_open && (
+                        <button
+                          onClick={() => handleGoToConversation(conv, null, false)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                          style={{ backgroundColor: colors.bgTertiary, color: colors.textSecondary }}
+                        >
+                          <MessageCircle size={13} />
+                          Apenas ver
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleGoToConversation(conv, null, true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        style={{ backgroundColor: conv.is_open ? '#10b981' : '#059669', color: '#fff' }}
+                      >
+                        <ExternalLink size={13} />
+                        {conv.is_open ? 'Ir para conversa' : 'Reabrir e ver'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Mensagens correspondentes */}
                   {conv.matched_messages.length > 0 && (
                     <div className="mt-2 space-y-1.5 border-t pt-2" style={{ borderColor: colors.border }}>
                       {conv.matched_messages.map(msg => (
-                        <div key={msg.id} className="rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: colors.bgTertiary }}>
+                        <div key={msg.id} className="rounded-lg px-3 py-2 text-xs cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: colors.bgTertiary }} onClick={() => handleGoToConversation(conv, msg.message_id || msg.id, true)}>
                           <div className="flex items-center justify-between mb-0.5">
                             <span className="font-medium" style={{ color: colors.textSecondary }}>
                               {msg.from_me ? 'Você' : conv.contact_name}
