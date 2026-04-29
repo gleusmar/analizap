@@ -1348,7 +1348,9 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
     } else if (mimeType.startsWith('audio/')) {
       messageType = 'audio';
       messageOptions = {
-        audio: file.buffer
+        audio: file.buffer,
+        mimetype: mimeType,
+        ptt: mimeType.includes('ogg') // PTT se for OGG
       };
     } else {
       messageType = 'document';

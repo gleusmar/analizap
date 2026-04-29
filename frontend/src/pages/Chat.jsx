@@ -752,15 +752,20 @@ function Chat() {
     if (conv) {
       handleSelectConversation(conv);
       if (scrollToId) {
-        // Aguardar mensagens carregar, depois scrollar e destacar
-        setTimeout(() => {
-          const el = document.getElementById(`msg-${scrollToId}`);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setHighlightedMessageId(scrollToId);
-            setTimeout(() => setHighlightedMessageId(null), 3000);
+        // Aguardar mensagens carregar (loadingConversation = false), depois scrollar
+        const checkAndScroll = setInterval(() => {
+          if (!loadingConversation) {
+            clearInterval(checkAndScroll);
+            const el = document.getElementById(`msg-${scrollToId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setHighlightedMessageId(scrollToId);
+              setTimeout(() => setHighlightedMessageId(null), 3000);
+            }
           }
-        }, 800);
+        }, 100);
+        // Timeout de segurança após 5 segundos
+        setTimeout(() => clearInterval(checkAndScroll), 5000);
       }
       navigate('/dashboard', { replace: true, state: {} });
     }
@@ -888,7 +893,8 @@ function Chat() {
 
   // Adicionar emoji ao input
   const handleEmojiClick = (emojiData) => {
-    setMessageInput(prev => prev + emojiData.emoji);
+    const emoji = emojiData.emoji || emojiData;
+    setMessageInput(prev => prev + emoji);
     setShowEmojiPicker(false);
   };
 

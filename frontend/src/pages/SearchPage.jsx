@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowLeft, MessageCircle, Phone, ExternalLink, RefreshCw } from 'lucide-react';
+import { Search, ArrowLeft, MessageCircle, Phone, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import { conversationsAPI } from '../services/api';
@@ -46,6 +46,11 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // BUG4: Modal para "Apenas Ver"
+  const [viewConv, setViewConv] = useState(null);
+  const [viewMessages, setViewMessages] = useState([]);
+  const [viewLoading, setViewLoading] = useState(false);
+
   const handleSearch = useCallback(async () => {
     if (!query.trim() || query.trim().length < 2) {
       setError('Digite ao menos 2 caracteres para buscar.');
@@ -69,6 +74,28 @@ export default function SearchPage() {
       await conversationsAPI.reopen(conv.id).catch(() => {});
     }
     navigate('/dashboard', { state: { openConversationId: conv.id, scrollToMessageId: messageId, viewOnly: !reopen && !conv.is_open } });
+  };
+
+  // BUG4: Abrir modal para "Apenas Ver"
+  const handleViewConversation = async (conv, messageId = null) => {
+    setViewConv(conv);
+    setViewLoading(true);
+    setViewMessages([]);
+    try {
+      const resp = await conversationsAPI.getMessages(conv.id);
+      setViewMessages(resp.data || []);
+      // Scroll para mensagem após carregar
+      if (messageId) {
+        setTimeout(() => {
+          const el = document.getElementById(`msg-${messageId}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    } catch (e) {
+      console.error('Erro ao carregar mensagens:', e);
+    } finally {
+      setViewLoading(false);
+    }
   };
 
   const formatDate = (ts) => {
@@ -193,7 +220,7 @@ export default function SearchPage() {
                     <div className="flex items-center gap-2">
                       {!conv.is_open && (
                         <button
-                          onClick={() => handleGoToConversation(conv, null, false)}
+                          onClick={() => handleViewConversation(conv)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
                           style={{ backgroundColor: colors.bgTertiary, color: colors.textSecondary }}
                         >
@@ -236,6 +263,70 @@ export default function SearchPage() {
           )
         )}
       </div>
+
+      {/* BUG4: Modal para "Apenas Ver" */}
+      {viewConv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="w-full max-w-4xl h-[80vh] rounded-xl flex flex-col" style={{ backgroundColor: colors.bg }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: colors.border }}>
+              <div className="flex items-center gap-3">
+                <img
+                  src={viewConv.profile_picture_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${viewConv.phone}`}
+                  alt={viewConv.contact_name}
+                  className="w-10 h-10 rounded-full"
+                />
+                <div>
+                  <p className="font-medium">{viewConv.contact_name || viewConv.phone}</p>
+                  <p className="text-xs" style={{ color: colors.textSecondary }}>{viewConv.phone} • {statusLabel(viewConv.status)}</p>
+                </div>
+              </div>
+              <button onClick={() => setViewConv(null)} className="p-2 rounded-lg hover:opacity-70">
+                <X size={20} style={{ color: colors.text }} />
+              </button>
+            </div>
+
+            {/* Mensagens */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {viewLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <RefreshCw size={24} className="animate-spin" style={{ color: colors.textSecondary }} />
+                </div>
+              ) : viewMessages.length === 0 ? (
+                <div className="text-center py-8" style={{ color: colors.textSecondary }}>
+                  Nenhuma mensagem
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {viewMessages.map(msg => (
+                    <div
+                      key={msg.id}
+                      id={`msg-${msg.message_id}`}
+                      className={`max-w-[80%] rounded-lg px-4 py-2 ${msg.from_me ? 'ml-auto' : 'mr-auto'}`}
+                      style={{
+                        backgroundColor: msg.from_me ? '#059669' : colors.bgSecondary,
+                        color: msg.from_me ? '#fff' : colors.text
+                      }}
+                    >
+                      {msg.message_type === 'text' ? (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      ) : msg.message_type === 'image' ? (
+                        <div>
+                          <img src={msg.content} alt="Imagem" className="max-w-full rounded" />
+                          {msg.metadata?.caption && <p className="mt-1 text-sm">{msg.metadata.caption}</p>}
+                        </div>
+                      ) : (
+                        <p>[{msg.message_type}]</p>
+                      )}
+                      <p className="text-xs mt-1 opacity-70">{new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

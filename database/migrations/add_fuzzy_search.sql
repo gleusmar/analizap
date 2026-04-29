@@ -25,7 +25,7 @@ RETURNS TABLE (
   conversation_id UUID,
   content TEXT,
   message_type TEXT,
-  timestamp TIMESTAMPTZ,
+  msg_timestamp TIMESTAMPTZ,
   from_me BOOLEAN,
   metadata JSONB,
   similarity_score FLOAT
@@ -37,7 +37,7 @@ BEGIN
     m.conversation_id,
     m.content,
     m.message_type,
-    m.timestamp,
+    m.timestamp AS msg_timestamp,
     m.from_me,
     m.metadata,
     similarity(unaccent(m.content), unaccent(search_term)) AS similarity_score

@@ -16,6 +16,7 @@ import {
   sendWhatsAppReaction,
   togglePin,
   addUserToConversation,
+  uploadFileToSupabase,
   MESSAGE_TYPES
 } from '../services/messageService.js';
 import { getSocket, getIO } from '../whatsapp/baileysClient.js';
@@ -678,6 +679,14 @@ export async function sendLocation(req, res) {
     const { conversationId } = req.params;
     const { latitude, longitude } = req.body;
 
+    // BUG11: garantir que latitude/longitude sejam números
+    const lat = typeof latitude === 'object' ? latitude.latitude : Number(latitude);
+    const lng = typeof longitude === 'object' ? longitude.longitude : Number(longitude);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ error: 'Coordenadas inválidas' });
+    }
+
     const sock = getSocket();
     if (!sock) {
       return res.status(400).json({ error: 'WhatsApp não está conectado' });
@@ -686,8 +695,8 @@ export async function sendLocation(req, res) {
     const sentMessage = await sendWhatsAppLocation(
       sock,
       conversationId,
-      latitude,
-      longitude
+      lat,
+      lng
     );
 
     // Gerar ID temporário para a mensagem
@@ -699,8 +708,8 @@ export async function sendLocation(req, res) {
       message_id: tempMessageId,
       from_me: true,
       message_type: MESSAGE_TYPES.LOCATION,
-      content: sentMessage.content,
-      metadata: { latitude, longitude },
+      content: JSON.stringify({ latitude: lat, longitude: lng }),
+      metadata: { latitude: lat, longitude: lng },
       timestamp: new Date().toISOString()
     });
 
@@ -824,10 +833,13 @@ export async function searchConversations(req, res) {
       const { data: fuzzyData, error: rpcErr } = await supabase.rpc('search_messages_fuzzy', rpcParams);
       if (!rpcErr && fuzzyData) {
         matchedMessages = fuzzyData;
+        logger.info(`Busca fuzzy retornou ${fuzzyData.length} mensagens`);
       } else {
+        logger.warn(`RPC search_messages_fuzzy falhou:`, { error: rpcErr?.message, code: rpcErr?.code });
         throw rpcErr || new Error('RPC indisponível');
       }
-    } catch (_) {
+    } catch (err) {
+      logger.warn(`Usando fallback ilike para busca:`, { error: err.message });
       // Fallback: ilike simples
       let msgQuery = supabase
         .from('messages')
