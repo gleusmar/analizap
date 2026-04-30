@@ -773,9 +773,13 @@ function setupEvents(socket) {
       if (!remoteJid || isGroupOrBroadcast(remoteJid)) continue;
       if (message.message?.protocolMessage) continue;
 
+      // BUG28: Log sucinto para cada mensagem do socket
+      const msgType = Object.keys(message.message || {})[0] || 'unknown';
+      const hasContent = !!message.message;
+      logger.debug(`SOCKET_MSG: type=${type} | jid=${remoteJid} | msgType=${msgType} | hasContent=${hasContent} | id=${message.key.id}`);
+
       // LOG: Log específico para mensagens privadas (notify)
       if (type === 'notify') {
-        const msgType = Object.keys(message.message || {})[0] || 'unknown';
         logger.debug(`MSG_PRIVADA: ${remoteJid} | tipo: ${msgType} | fromMe: ${message.key.fromMe} | id: ${message.key.id}`);
       }
 
