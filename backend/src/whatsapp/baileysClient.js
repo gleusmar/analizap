@@ -1519,8 +1519,8 @@ async function handleChatUpdate(chat) {
     // Conversas só devem ser criadas quando há mensagens reais
     const remoteJid = chat.id;
     
-    // BUG26: Não ignorar LIDs - mensagens podem chegar primeiro com LID antes da conversão para JID
-    if (isGroupOrBroadcast(remoteJid)) {
+    // Ignorar grupos, status, newsletter, canais e LIDs
+    if (isGroupOrBroadcast(remoteJid) || remoteJid.endsWith('@lid')) {
       return;
     }
     
