@@ -1297,24 +1297,34 @@ async function handleIncomingMessage(message, shouldProcess = true) {
   try {
     const { key, message: msg, pushName, messageTimestamp } = message;
     const remoteJid = key.remoteJid;
+    
+    // BUG26: Log início do processamento
+    logger.debug(`HANDLE_MSG_START: id=${key.id} | remoteJid=${remoteJid} | shouldProcess=${shouldProcess}`);
+    
     // C5: dedup — ignorar se message_id já foi processado recentemente (evita duplicata LID+JID)
     if (recentlyProcessedIds.has(key.id)) {
+      logger.debug(`HANDLE_MSG_DEDUP: id=${key.id} já processado recentemente`);
       return;
     }
     markProcessed(key.id);
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
+      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - grupo/broadcast`);
       return;
     }
 
     // Verificar se a mensagem tem conteúdo válido
     if (!msg || Object.keys(msg).length === 0) {
+      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - sem conteúdo`);
       return;
     }
 
     // Ignorar mensagens de protocolo
-    if (msg.protocolMessage) return;
+    if (msg.protocolMessage) {
+      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - protocolMessage`);
+      return;
+    }
 
     // Extrair tipo de mensagem para log
     let messageType = 'texto';
@@ -1509,8 +1519,8 @@ async function handleChatUpdate(chat) {
     // Conversas só devem ser criadas quando há mensagens reais
     const remoteJid = chat.id;
     
-    // Ignorar grupos, status, newsletter, canais e LIDs
-    if (isGroupOrBroadcast(remoteJid) || remoteJid.endsWith('@lid')) {
+    // BUG26: Não ignorar LIDs - mensagens podem chegar primeiro com LID antes da conversão para JID
+    if (isGroupOrBroadcast(remoteJid)) {
       return;
     }
     
