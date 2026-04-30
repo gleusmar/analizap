@@ -436,6 +436,11 @@ function setupEvents(socket) {
   socket.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, isNewLogin, qr } = update;
 
+    // BUG24/BUG25: Log mudanças de conexão para rastrear perda de mensagens
+    if (connection) {
+      logger.debug(`CONN_UPDATE: ${connection} | isNewLogin: ${isNewLogin}`);
+    }
+
     if (qr) {
       const qrCodeImage = await QRCode.toDataURL(qr);
       qrCode = qrCodeImage;
@@ -450,6 +455,9 @@ function setupEvents(socket) {
       const statusCode = (lastDisconnect?.error instanceof Boom)
         ? lastDisconnect.error.output?.statusCode
         : undefined;
+
+      // BUG24/BUG25: Log detalhado de desconexão
+      logger.debug(`CONN_CLOSE: statusCode: ${statusCode} | reason: ${lastDisconnect?.error?.message}`);
 
       // Determinar se deve reconectar baseado no DisconnectReason
       let shouldReconnect = true;
@@ -758,14 +766,18 @@ function setupEvents(socket) {
 
   // Evento de atualização de mensagens
   socket.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type === 'notify') logger.debug('messages.upsert:', { type, count: messages.length });
-
     for (const message of messages) {
       const remoteJid = message.key?.remoteJid;
 
       // Filtro imediato: ignorar grupos, broadcasts, newsletters e protocolos
       if (!remoteJid || isGroupOrBroadcast(remoteJid)) continue;
       if (message.message?.protocolMessage) continue;
+
+      // LOG: Log específico para mensagens privadas (notify)
+      if (type === 'notify') {
+        const msgType = Object.keys(message.message || {})[0] || 'unknown';
+        logger.debug(`MSG_PRIVADA: ${remoteJid} | tipo: ${msgType} | fromMe: ${message.key.fromMe} | id: ${message.key.id}`);
+      }
 
       if (message.key.fromMe) {
         // Mensagem enviada por nós: processSentMessage verifica duplicação internamente
