@@ -893,7 +893,9 @@ function Chat() {
 
   // Adicionar emoji ao input
   const handleEmojiClick = (emojiData) => {
+    console.log('Emoji clicked:', emojiData);
     const emoji = emojiData.emoji || emojiData;
+    console.log('Extracted emoji:', emoji);
     setMessageInput(prev => prev + emoji);
     setShowEmojiPicker(false);
   };

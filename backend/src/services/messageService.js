@@ -755,7 +755,8 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
     const savedMessage = await saveMessage(messageData);
 
     // Se não for from_me e a conversa não estiver aberta, incrementa contador de não lidas
-    if (!fromMe) {
+    // BUG20: System messages não devem contar para contador de não lidas
+    if (!fromMe && messageType !== 'system') {
       const { data: currentConv } = await supabase
         .from('conversations')
         .select('unread_count, is_open')
@@ -1330,7 +1331,7 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
     const phoneJid = `${conversation.phone}@s.whatsapp.net`;
 
     // Determinar tipo de arquivo
-    const mimeType = file.mimetype;
+    const mimeType = file.mimetype || file.mimetype || 'application/octet-stream';
     let messageType = 'document';
     let messageOptions = {};
 

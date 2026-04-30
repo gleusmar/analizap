@@ -83,7 +83,8 @@ export default function SearchPage() {
     setViewMessages([]);
     try {
       const resp = await conversationsAPI.getMessages(conv.id);
-      setViewMessages(resp.data || []);
+      // BUG19: Garantir que viewMessages seja array
+      setViewMessages(Array.isArray(resp.data) ? resp.data : []);
       // Scroll para mensagem após carregar
       if (messageId) {
         setTimeout(() => {
@@ -93,6 +94,7 @@ export default function SearchPage() {
       }
     } catch (e) {
       console.error('Erro ao carregar mensagens:', e);
+      setViewMessages([]);
     } finally {
       setViewLoading(false);
     }

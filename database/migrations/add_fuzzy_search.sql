@@ -13,6 +13,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_contact_name_trgm
 CREATE INDEX IF NOT EXISTS idx_conversations_phone_trgm
   ON conversations USING GIN (phone gin_trgm_ops);
 
+-- BUG17/BUG18: Drop function first to fix structure mismatch
+DROP FUNCTION IF EXISTS search_messages_fuzzy(TEXT, TIMESTAMPTZ, TIMESTAMPTZ, FLOAT);
+
 -- Função RPC para busca fuzzy em mensagens
 CREATE OR REPLACE FUNCTION search_messages_fuzzy(
   search_term TEXT,
