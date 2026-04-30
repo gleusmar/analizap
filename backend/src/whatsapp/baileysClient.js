@@ -776,11 +776,11 @@ function setupEvents(socket) {
       // BUG28: Log sucinto para cada mensagem do socket
       const msgType = Object.keys(message.message || {})[0] || 'unknown';
       const hasContent = !!message.message;
-      logger.debug(`SOCKET_MSG: type=${type} | jid=${remoteJid} | msgType=${msgType} | hasContent=${hasContent} | id=${message.key.id}`);
+      logger.info(`SOCKET_MSG: type=${type} | jid=${remoteJid} | msgType=${msgType} | hasContent=${hasContent} | id=${message.key.id}`);
 
       // LOG: Log específico para mensagens privadas (notify)
       if (type === 'notify') {
-        logger.debug(`MSG_PRIVADA: ${remoteJid} | tipo: ${msgType} | fromMe: ${message.key.fromMe} | id: ${message.key.id}`);
+        logger.info(`MSG_PRIVADA: ${remoteJid} | tipo: ${msgType} | fromMe: ${message.key.fromMe} | id: ${message.key.id}`);
       }
 
       if (message.key.fromMe) {
@@ -1303,30 +1303,30 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     const remoteJid = key.remoteJid;
     
     // BUG26: Log início do processamento
-    logger.debug(`HANDLE_MSG_START: id=${key.id} | remoteJid=${remoteJid} | shouldProcess=${shouldProcess}`);
+    logger.info(`HANDLE_MSG_START: id=${key.id} | remoteJid=${remoteJid} | shouldProcess=${shouldProcess}`);
     
     // C5: dedup — ignorar se message_id já foi processado recentemente (evita duplicata LID+JID)
     if (recentlyProcessedIds.has(key.id)) {
-      logger.debug(`HANDLE_MSG_DEDUP: id=${key.id} já processado recentemente`);
+      logger.info(`HANDLE_MSG_DEDUP: id=${key.id} já processado recentemente`);
       return;
     }
     markProcessed(key.id);
 
     // Ignorar mensagens de grupo, status, newsletter e canais
     if (isGroupOrBroadcast(remoteJid)) {
-      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - grupo/broadcast`);
+      logger.info(`HANDLE_MSG_SKIP: id=${key.id} - grupo/broadcast`);
       return;
     }
 
     // Verificar se a mensagem tem conteúdo válido
     if (!msg || Object.keys(msg).length === 0) {
-      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - sem conteúdo`);
+      logger.info(`HANDLE_MSG_SKIP: id=${key.id} - sem conteúdo`);
       return;
     }
 
     // Ignorar mensagens de protocolo
     if (msg.protocolMessage) {
-      logger.debug(`HANDLE_MSG_SKIP: id=${key.id} - protocolMessage`);
+      logger.info(`HANDLE_MSG_SKIP: id=${key.id} - protocolMessage`);
       return;
     }
 
