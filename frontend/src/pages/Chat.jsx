@@ -895,8 +895,25 @@ function Chat() {
   const handleEmojiClick = (emojiData, event) => {
     // BUG21: Prevenir fechamento rápido
     if (event) event.stopPropagation();
-    console.log('Emoji clicked:', emojiData);
-    const emoji = emojiData.emoji || emojiData;
+    console.log('Emoji clicked full data:', JSON.stringify(emojiData));
+    console.log('Emoji clicked type:', typeof emojiData);
+    console.log('Emoji clicked keys:', Object.keys(emojiData));
+    
+    // Tentar extrair emoji de diferentes maneiras
+    let emoji = '';
+    if (typeof emojiData === 'string') {
+      emoji = emojiData;
+    } else if (emojiData.emoji) {
+      emoji = emojiData.emoji;
+    } else if (emojiData.native) {
+      emoji = emojiData.native;
+    } else if (emojiData.char) {
+      emoji = emojiData.char;
+    } else {
+      console.error('Could not extract emoji from:', emojiData);
+      return;
+    }
+    
     console.log('Extracted emoji:', emoji);
     setMessageInput(prev => prev + emoji);
     // BUG21: Não fechar imediatamente, manter aberto para seleção rápida

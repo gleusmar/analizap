@@ -1352,7 +1352,7 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
       messageOptions = {
         audio: file.buffer,
         mimetype: mimeType,
-        ptt: mimeType.includes('ogg'), // PTT se for OGG
+        ptt: true, // BUG15: Force PTT for all audio to ensure mobile playback
         seconds: Math.ceil(file.buffer.length / 8000), // Estimativa de duração
         caption: caption || ''
       };

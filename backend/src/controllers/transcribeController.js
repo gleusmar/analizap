@@ -16,46 +16,59 @@ export async function transcribeAudio(req, res) {
       return res.status(500).json({ error: 'Serviço de transcrição não configurado' });
     }
 
-    // Enviar URL para AssemblyAI (mais eficiente que baixar)
-    const uploadResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+    const baseUrl = "https://api.assemblyai.com";
+    const headers = {
+      authorization: ASSEMBLYAI_API_KEY,
+    };
+
+    // BUG23: Usar código fornecido pelo AssemblyAI
+    const data = {
+      audio_url: audioUrl,
+      language_detection: true,
+      speech_models: ["universal-3-pro", "universal-2"]
+    };
+
+    const url = `${baseUrl}/v2/transcript`;
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': ASSEMBLYAI_API_KEY,
+        ...headers,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        audio_url: audioUrl,
-        language_code: 'pt' // Português
-      })
+      body: JSON.stringify(data)
     });
 
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      logger.error('Erro na API AssemblyAI:', errorText);
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Erro na API AssemblyAI (upload):', errorText);
       throw new Error('Erro na transcrição via AssemblyAI');
     }
 
-    const uploadResult = await uploadResponse.json();
-    const transcriptId = uploadResult.id;
+    const result = await response.json();
+    const transcriptId = result.id;
+    const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
 
     // Poll para verificar se a transcrição está pronta
-    let transcript = null;
+    let transcriptionResult = null;
     for (let i = 0; i < 30; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-        headers: { 'Authorization': ASSEMBLYAI_API_KEY }
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const pollingResponse = await fetch(pollingEndpoint, {
+        headers: headers,
       });
-      transcript = await statusResponse.json();
-      if (transcript.status === 'completed' || transcript.status === 'error') {
+      transcriptionResult = await pollingResponse.json();
+
+      if (transcriptionResult.status === 'completed') {
         break;
+      } else if (transcriptionResult.status === 'error') {
+        throw new Error(`Transcrição falhou: ${transcriptionResult.error}`);
       }
     }
 
-    if (!transcript || transcript.status === 'error') {
-      throw new Error('Transcrição falhou');
+    if (!transcriptionResult || transcriptionResult.status !== 'completed') {
+      throw new Error('Transcrição falhou - timeout');
     }
     
-    res.json({ transcription: transcript.text });
+    res.json({ transcription: transcriptionResult.text });
   } catch (error) {
     logger.error('Erro ao transcrever áudio:', error);
     res.status(500).json({ error: 'Erro ao transcrever áudio' });

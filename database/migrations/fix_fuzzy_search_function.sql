@@ -2,7 +2,7 @@
 -- Drop existing function completely
 DROP FUNCTION IF EXISTS search_messages_fuzzy;
 
--- Recreate function with correct structure
+-- Recreate function with correct structure and explicit casts
 CREATE OR REPLACE FUNCTION search_messages_fuzzy(
   search_term TEXT,
   date_from TIMESTAMPTZ DEFAULT NULL,
@@ -22,20 +22,20 @@ RETURNS TABLE (
 BEGIN
   RETURN QUERY
   SELECT
-    m.id,
-    m.conversation_id,
-    m.content,
-    m.message_type,
-    m.timestamp AS msg_timestamp,
-    m.from_me,
-    m.metadata,
-    similarity(unaccent(m.content), unaccent(search_term)) AS similarity_score
+    m.id::UUID,
+    m.conversation_id::UUID,
+    m.content::TEXT,
+    m.message_type::TEXT,
+    m.timestamp::TIMESTAMPTZ AS msg_timestamp,
+    m.from_me::BOOLEAN,
+    m.metadata::JSONB,
+    similarity(unaccent(m.content::TEXT), unaccent(search_term::TEXT))::FLOAT AS similarity_score
   FROM messages m
   WHERE
     m.message_type = 'text'
     AND (
       m.content ILIKE '%' || search_term || '%'
-      OR similarity(unaccent(m.content), unaccent(search_term)) > similarity_threshold
+      OR similarity(unaccent(m.content::TEXT), unaccent(search_term::TEXT)) > similarity_threshold
     )
     AND (date_from IS NULL OR m.timestamp >= date_from)
     AND (date_to IS NULL OR m.timestamp <= date_to)
