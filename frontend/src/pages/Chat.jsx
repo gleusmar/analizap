@@ -892,12 +892,15 @@ function Chat() {
   };
 
   // Adicionar emoji ao input
-  const handleEmojiClick = (emojiData) => {
+  const handleEmojiClick = (emojiData, event) => {
+    // BUG21: Prevenir fechamento rápido
+    if (event) event.stopPropagation();
     console.log('Emoji clicked:', emojiData);
     const emoji = emojiData.emoji || emojiData;
     console.log('Extracted emoji:', emoji);
     setMessageInput(prev => prev + emoji);
-    setShowEmojiPicker(false);
+    // BUG21: Não fechar imediatamente, manter aberto para seleção rápida
+    // setShowEmojiPicker(false);
   };
 
   // Selecionar tipo de anexo
@@ -1936,7 +1939,7 @@ function Chat() {
 
               {/* Emoji Picker */}
               {showEmojiPicker && (
-                <div className="absolute bottom-20 left-4 z-50">
+                <div className="absolute bottom-20 left-4 z-[1000]" onClick={(e) => e.stopPropagation()}>
                   <EmojiPicker
                     onEmojiClick={handleEmojiClick}
                     theme="dark"

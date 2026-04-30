@@ -187,6 +187,7 @@ function SettingsUsers() {
               <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Apelido</th>
               <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Departamento</th>
               <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Perfil</th>
+              <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Online</th>
               <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Status</th>
               <th className="text-left py-2 px-3 font-medium" style={{ color: colors.textSecondary }}>Ações</th>
             </tr>
@@ -202,6 +203,16 @@ function SettingsUsers() {
                   <span className={`px-2 py-0.5 rounded text-xs border ${getRoleColor(user.role)}`}>
                     {getRoleLabel(user.role)}
                   </span>
+                </td>
+                <td className="py-2 px-3">
+                  {user.is_online ? (
+                    <span className="flex items-center">
+                      <span className="w-2 h-2 bg-emerald-400 rounded-full mr-2"></span>
+                      <span className="text-emerald-400 text-xs">Online</span>
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 text-xs">Offline</span>
+                  )}
                 </td>
                 <td className="py-2 px-3">
                   <span className={`px-2 py-0.5 rounded text-xs border ${user.is_active ? 'bg-emerald-600/30 text-emerald-400 border-emerald-500' : 'bg-red-600/30 text-red-400 border-red-500'}`}>

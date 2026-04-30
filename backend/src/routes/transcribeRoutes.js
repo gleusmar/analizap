@@ -3,6 +3,6 @@ import { transcribeAudio } from '../controllers/transcribeController.js';
 
 const router = express.Router();
 
-router.post('/transcribe', transcribeAudio);
+router.post('/transcribe', express.json(), transcribeAudio);
 
 export default router;

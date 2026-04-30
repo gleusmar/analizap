@@ -1358,7 +1358,7 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
       };
       logger.info('Enviando áudio para WhatsApp:', {
         size: file.buffer.length,
-        mimetype,
+        mimetype: mimeType,
         ptt: messageOptions.ptt,
         seconds: messageOptions.seconds
       });

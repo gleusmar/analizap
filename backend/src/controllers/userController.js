@@ -27,11 +27,24 @@ export const userController = {
 
       if (error) throw error;
 
-      // Remover password_hash da resposta
-      const usersWithoutPassword = data.map(user => {
+      // Remover password_hash da resposta e adicionar contagem de sessões ativas
+      const usersWithoutPassword = await Promise.all(data.map(async user => {
         const { password_hash, ...userWithoutPassword } = user;
-        return userWithoutPassword;
-      });
+
+        // SETTINGS: Contar sessões ativas do usuário
+        const { data: sessions } = await supabase
+          .from('user_sessions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .gt('expires_at', new Date().toISOString());
+
+        return {
+          ...userWithoutPassword,
+          is_online: sessions && sessions.length > 0,
+          active_sessions_count: sessions?.length || 0
+        };
+      }));
 
       res.json(usersWithoutPassword);
     } catch (error) {
