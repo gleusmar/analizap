@@ -738,8 +738,9 @@ export async function processWhatsAppMessage(message, sock = null, syncPeriodDay
       metadata = { ...metadata, quoted_message_wid: quotedMessageWid };
     }
 
-    // Salva a mensagem
-    const unique_id = `${key.remoteJid}-${fromMe ? '1' : '0'}-${key.id}`;
+    // Salva a mensagem - normaliza LID->JID para unique_id consistente
+    const normalizedJid = lid ? await getJidFromLid(lid) : phone;
+    const unique_id = `${normalizedJid || phone || lid}-${fromMe ? '1' : '0'}-${key.id}`;
     const messageData = {
       conversation_id: conversation.id,
       message_id: key.id,
@@ -1350,8 +1351,16 @@ export async function sendWhatsAppAttachment(sock, conversationId, file, caption
       messageOptions = {
         audio: file.buffer,
         mimetype: mimeType,
-        ptt: mimeType.includes('ogg') // PTT se for OGG
+        ptt: mimeType.includes('ogg'), // PTT se for OGG
+        seconds: Math.ceil(file.buffer.length / 8000), // Estimativa de duração
+        caption: caption || ''
       };
+      logger.info('Enviando áudio para WhatsApp:', {
+        size: file.buffer.length,
+        mimetype,
+        ptt: messageOptions.ptt,
+        seconds: messageOptions.seconds
+      });
     } else {
       messageType = 'document';
       messageOptions = {

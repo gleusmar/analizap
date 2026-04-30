@@ -1317,7 +1317,7 @@ async function handleIncomingMessage(message, shouldProcess = true) {
     } else if (msg.documentMessage) {
       messageType = 'documento';
     } else if (msg.locationMessage) {
-      messageType = 'localização';
+      messageType = 'location';
     } else if (msg.contactMessage) {
       messageType = 'contato';
     } else if (msg.stickerMessage) {

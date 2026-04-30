@@ -1022,13 +1022,11 @@ function Chat() {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        };
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
 
         try {
-          await conversationsAPI.sendLocation(selectedConversation.id, location);
+          await conversationsAPI.sendLocation(selectedConversation.id, lat, lng);
           refreshMessages();
           refreshConversations();
         } catch (error) {

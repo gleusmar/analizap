@@ -9,6 +9,7 @@ import tagRoutes from './routes/tagRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import conversationRoutes from './routes/conversationRoutes.js';
 import predefinedMessagesRoutes from './routes/predefinedMessagesRoutes.js';
+import transcribeRoutes from './routes/transcribeRoutes.js';
 import { logger } from './utils/logger.js';
 import { initializeSocket } from './sockets/socket.js';
 
@@ -47,6 +48,7 @@ app.use('/api/tags', tagRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api', conversationRoutes);
 app.use('/api', predefinedMessagesRoutes);
+app.use('/api', transcribeRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

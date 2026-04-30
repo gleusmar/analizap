@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle, Phone, VideoOff } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { MessageCircle, Image, Music, Video, FileText, MapPin, User, X, Smile, Share, Reply, AlertCircle, Phone, VideoOff, MoreVertical, Download, Mic } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export function MessageBubble({ message, isMe, onReact, onForward, onReply, onScrollToMessage }) {
@@ -7,6 +7,9 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
   const [modalImage, setModalImage] = useState(null);
   const [showActions, setShowActions] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // BUG8: transcrição de áudio
+  const [transcription, setTranscription] = useState(null);
+  const [transcribing, setTranscribing] = useState(false);
   const { colors } = useTheme();
   const { message_type, content, metadata, timestamp, is_delivered, is_read, delivery_error } = message;
 
@@ -24,6 +27,30 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // BUG8: Handler para transcrever áudio usando Groq API (gratuita)
+  const handleTranscribeAudio = async () => {
+    if (!content || transcribing) return;
+    setTranscribing(true);
+    try {
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl: content })
+      });
+      const data = await response.json();
+      if (data.transcription) {
+        setTranscription(data.transcription);
+      } else {
+        alert('Erro ao transcrever áudio');
+      }
+    } catch (error) {
+      console.error('Erro ao transcrever:', error);
+      alert('Erro ao transcrever áudio');
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const renderDeliveryStatus = () => {
@@ -201,7 +228,22 @@ export function MessageBubble({ message, isMe, onReact, onForward, onReply, onSc
                   {Math.floor(metadata.seconds / 60)}:{(metadata.seconds % 60).toString().padStart(2, '0')}
                 </span>
               )}
+              {/* BUG8: Botão de transcrição */}
+              <button
+                onClick={handleTranscribeAudio}
+                disabled={transcribing}
+                className="p-1 rounded hover:opacity-70 disabled:opacity-50"
+                title="Transcrever áudio"
+                style={{ color: isMe ? colors.meMessageText : colors.text }}
+              >
+                <Mic size={16} />
+              </button>
             </div>
+            {transcription && (
+              <div className="mt-2 p-2 rounded text-xs" style={{ backgroundColor: colors.bgTertiary, color: colors.text }}>
+                <span className="font-medium">Transcrição:</span> {transcription}
+              </div>
+            )}
           </div>
         );
 
